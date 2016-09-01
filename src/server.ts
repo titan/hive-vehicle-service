@@ -118,8 +118,8 @@ svc.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, na
   let vid = uuid.v1();
   let args = [pid, name, identity_no, phone, ctx.uid, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
    receipt_no, receipt_date, last_insurance_company, insurance_due_date];
-  ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
-  rep({status: 'okay'});
+   ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
+   rep({status: 'okay'});
 });
 
 svc.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, name:string, identity_no:string, phone:string,is_primary:boolean) => {
