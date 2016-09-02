@@ -1,0 +1,102 @@
+
+INSERT INTO 
+vehicle_model(
+  vehicle_code,
+  vin_code,
+  vehicle_name,
+  brand_name,
+  family_name,
+  body_type,
+  engine_number,
+  engine_desc,
+  gearbox_name,
+  year_pattern,
+  group_name,
+  cfg_level,
+  purchase_price,
+  purchase_price_tax,
+  seat,
+  effluent_standard,
+  pl,
+  fuel_jet_type,
+  driven_type
+)
+VALUES(
+  'I0000000000000000250000000000041',
+  'LSVFA49J232037048',
+  '宝来FV7162F轿车',
+  '大众',
+  '宝来',
+  '三厢',
+  'BWG 058892',
+  '1.6L',
+  '手动档',
+  '2006',
+  '宝来GP 三厢(06/07-08/09)',
+  '时尚型',
+  113800,
+  118663,
+  5,
+  '国二',
+  '1.595',
+  '多点电喷',
+  '前置前驱'
+);
+
+INSERT INTO 
+vehicle_model(
+  vehicle_code,
+  vin_code,
+  vehicle_name,
+  brand_name,
+  family_name,
+  body_type,
+  engine_number,
+  engine_desc,
+  gearbox_name,
+  year_pattern,
+  group_name,
+  cfg_level,
+  purchase_price,
+  purchase_price_tax,
+  seat,
+  effluent_standard,
+  pl,
+  fuel_jet_type,
+  driven_type
+)
+VALUES(
+  'I0000000000000000250000000000040',
+  'LSVFA49J232037048',
+  '宝来FV7162F轿车',
+  '大众',
+  '宝来',
+  '三厢',
+  'BWG 058892',
+  '1.6L',
+  '手动档',
+  '2006',
+  '宝来GP 三厢(06/07-08/09)',
+  '豪华型',
+  113800,
+  118663,
+  5,
+  '国二',
+  '1.595',
+  '多点电喷',
+  '前置前驱'
+);
+INSERT INTO person(
+  id,
+  name,
+  is_owner,
+  identity_no,
+  phone
+)
+VALUES(
+  '00000000-0000-0000-1000-000000000000',
+  'aaa',
+  true,
+  '11111111',
+  '11111111111'
+);   
