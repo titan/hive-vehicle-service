@@ -35,27 +35,25 @@ let config: Config = {
 let processor = new Processor(config);
 
 //新车已上牌
-processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: DoneFunction, pid, name,  identity_no, phone, user_id, vehicle_code,vid,license_no, engine_no, 
-  register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date) => {
+processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('setVehicleInfoOnCard');
   //insert a record into person 
-  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4, $5)',[pid,
-   name,  identity_no, phone], (err: Error) => {
+  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4, $5)',[args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
      if (err) {
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
         db.query('INSERT INTO vehicles (id, user_id, owner,vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer,\
-        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11)',[vid, user_id,pid, vehicle_code, license_no, engine_no, register_date,
-         average_mileage, is_transfer,last_insurance_company, insurance_due_date], (err: Error) => {
+        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11)',[args.vid, args.uid, args.pid, args.vehicle_code, args.license_no, args.engine_no, args.register_date,
+         args.average_mileage, args.is_transfer,args.last_insurance_company, args.insurance_due_date], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:vid, owenr:{id:pid, user_id:user_id, name:name, identity_no:identity_no,phone:phone}, drivers:[], vehicle_code:vehicle_code, license_no:license_no, 
-            engine_no:engine_no, register_date:register_date, average_mileage:average_mileage, is_transfer:is_transfer,last_insurance_company:last_insurance_company, insurance_due_date:insurance_due_date};
+            let vehicle = {id:args.vid, owenr:{id:args.pid, user_id:args.uid, name:name, identity_no:args.identity_no, phone:args.phone}, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            engine_no:args.engine_no, register_date:args.register_date, average_mileage:args.average_mileage, is_transfer:args.is_transfer,last_insurance_company:args.last_insurance_company, insurance_due_date:args.insurance_due_date};
             let multi = cache.multi();
-            multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-            multi.lpush("vehicle", vid);
+            multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));
+            multi.lpush("vehicle", args.vid);
             multi.exec((err, replies) => {
               if (err) {
                 log.error(err);
@@ -68,27 +66,26 @@ processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: 
    });
 });
 //新车未上牌
-processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, pid, name, identity_no, phone, user_id, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
-   receipt_no, receipt_date, last_insurance_company, insurance_due_date) => {
+processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('setVehicleInfo');
   //insert a record into person 
-  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)',[pid,name,  identity_no, phone], (err: Error) => {
+  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)',[args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
      if (err) {
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
         db.query('INSERT INTO vehicles (id, user_id, owner,vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no,\
-        receipt_date,last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12)',[vid,
-        pid, user_id, vehicle_code, license_no, engine_no, average_mileage, is_transfer, receipt_no,receipt_date, last_insurance_company,
-        insurance_due_date], (err: Error) => {
+        receipt_date,last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12)',[args.vid,
+        args.pid, args.uid, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company,
+        args.insurance_due_date], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:vid, owner:{id:pid, user_id:user_id, name:name, identity_no:identity_no,phone:phone}, drivers:[], vehicle_code:vehicle_code, license_no:license_no, 
-            engine_no:engine_no, average_mileage:average_mileage, is_transfer:is_transfer, receipt_no:receipt_no, receipt_date:receipt_date, last_insurance_company:last_insurance_company, insurance_due_date:insurance_due_date};
+            let vehicle = {id:args.vid, owner:{id:args.pid, user_id:args.uid, name:args.name, identity_no:args.identity_no, phone:args.phone}, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            engine_no:args.engine_no, average_mileage:args.average_mileage, is_transfer:args.is_transfer, receipt_no:args.receipt_no, receipt_date:args.receipt_date, last_insurance_company:args.last_insurance_company, insurance_due_date:args.insurance_due_date};
             let multi = cache.multi();
-            multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-            multi.lpush("vehicle", vid);
+            multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));
+            multi.lpush("vehicle", args.vid);
             multi.exec((err, replies) => {
               if (err) {
                 log.error(err);
@@ -101,22 +98,21 @@ processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFu
    });
 });
 
-processor.call('setDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, pid, did, vid, name,identity_no,phone,is_primary) => {
+processor.call('setDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('setDriverInfo');
   //insert a record into person 
-  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4, $5)',[pid,
-   name, identity_no, phone], (err: Error) => {
+  db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4, $5)',[args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
      if (err) {
       log.error(err, 'query error');
      }else{
-        db.query('INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)',[did, vid, pid, is_primary], 
+        db.query('INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)',[args.did, args.vid, args.pid, args.is_primary], 
         (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
             let multi = cache.multi();
-            let vehicle=multi.hget("vehicle-entities",vid);
-            vehicle["drivers"].push({id:pid, name:name, identity_no: identity_no ,phone:phone});
+            let vehicle=multi.hget("vehicle-entities", args.vid);
+            vehicle["drivers"].push({id:args.pid, name:args.name, identity_no:args.identity_no ,phone:args.phone});
             multi.exec((err, replies) => {
               if (err) {
                 log.error(err);
@@ -129,22 +125,22 @@ processor.call('setDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFun
    });
 });
 
-processor.call('changeDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, vid, pid, name, identity_no, phone) => {
+processor.call('changeDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('changeDriverInfo');
-  db.query('UPDATE person SET name=$1, identity_no=$2, phone=$3 WHERE id=$4',[name, identity_no, phone, pid],(err: Error) => {
+  db.query('UPDATE person SET name=$1, identity_no=$2, phone=$3 WHERE id=$4',[args.name, args.identity_no, args.phone, args.pid],(err: Error) => {
       if (err) {
         log.error(err);
       }else{
         let multi = cache.multi();
-        let vehicle = multi.hget("vehicle-entities",vid);
+        let vehicle = multi.hget("vehicle-entities",args.vid);
         let drivers = vehicle["drivers"];
         let new_drivers = [];
         for(let driver of drivers){
-          if(driver.id != pid){
+          if(driver.id != args.pid){
             new_drivers.push(driver);
           }
         }
-        new_drivers.push({id:pid, name:name,identity_no:identity_no, phone:phone});
+        new_drivers.push({id:args.pid, name:name,identity_no:args.identity_no, phone:args.phone});
         vehicle["drivers"] = new_drivers;
         multi.exec((err, replies) => {
           if (err) {
@@ -156,20 +152,20 @@ processor.call('changeDriverInfo', (db: PGClient, cache: RedisClient, done: Done
   });
 });
 
-processor.call('uploadDriverImages', (db: PGClient, cache: RedisClient, done: DoneFunction, vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views) => {
+processor.call('uploadDriverImages', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('uploadDriverImages');
-  db.query('UPDATE vehicles SET driving_frontal_view=$1, driving_rear_view=$2 WHERE id=$3',[driving_frontal_view, driving_rear_view, vid],(err: Error) => {
+  db.query('UPDATE vehicles SET driving_frontal_view=$1, driving_rear_view=$2 WHERE id=$3',[args.driving_frontal_view, args.driving_rear_view, args.vid],(err: Error) => {
       if (err) {
         log.error(err);
       }else{
-        db.query('UPDATE person SET identity_frontal_view=$1, identity_rear_view=$2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)',[identity_frontal_view, identity_rear_view, vid],(err: Error) => {
+        db.query('UPDATE person SET identity_frontal_view=$1, identity_rear_view=$2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)',[args.identity_frontal_view, args.identity_rear_view, args.vid],(err: Error) => {
           if (err) {
             log.error(err);
           }else{
             let pids = [];
             let images = [];
             let obj = null;
-            for(let key in license_frontal_views){
+            for(let key in args.license_frontal_views){
               if(key){
                 images.push(obj[key]);
                 pids.push(key);
@@ -183,9 +179,9 @@ processor.call('uploadDriverImages', (db: PGClient, cache: RedisClient, done: Do
               });
             }
             let multi = cache.multi();
-            let vehicle=multi.hget("vehicle-entities",vid);
-            vehicle["driving_frontal_view"] = driving_frontal_view;
-            vehicle["driving_rear_view"] = driving_rear_view;
+            let vehicle=multi.hget("vehicle-entities", args.vid);
+            vehicle["driving_frontal_view"] = args.driving_frontal_view;
+            vehicle["driving_rear_view"] = args.driving_rear_view;
             multi.exec((err, replies) => {
               if (err) {
                 log.error(err);
@@ -199,7 +195,7 @@ processor.call('uploadDriverImages', (db: PGClient, cache: RedisClient, done: Do
   });
 });
 
-processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done: DoneFunction,args) => {
+processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
   log.info('getVehicleModelsByMake');
   for(let arg of args){
     db.query('INSERT INTO vehicle_model(vehicle_code,vin_code,vehicle_name,brand_name,family_name,body_type,engine_number,engine_desc,gearbox_name,year_pattern,\
