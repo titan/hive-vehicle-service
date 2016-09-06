@@ -45,13 +45,13 @@ processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: 
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer,\
-        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12)',[args.vid, args.uid, args.pid, 0, args.vehicle_code, args.license_no, args.engine_no, args.register_date,
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer,\
+        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)',[args.vid, args.uid, args.pid, 0, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date,
          args.average_mileage, args.is_transfer,args.last_insurance_company, args.insurance_due_date], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:args.vid, owenr:{id:args.pid, user_id:args.uid, name:name, identity_no:args.identity_no, phone:args.phone}, owner_type:0, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            let vehicle = {id:args.vid, owenr:{id:args.pid, user_id:args.uid, name:name, identity_no:args.identity_no, phone:args.phone}, owner_type:0, recommend: args.recommend, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
             engine_no:args.engine_no, register_date:args.register_date, average_mileage:args.average_mileage, is_transfer:args.is_transfer,last_insurance_company:args.last_insurance_company, insurance_due_date:args.insurance_due_date};
             let multi = cache.multi();
             multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));
@@ -76,13 +76,13 @@ processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFu
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no,\
-        receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12)',[args.vid, args.uid,
-        args.pid, 1, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no,\
+        receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid,
+        args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:args.vid, owner:{id:args.pid, user_id:args.uid, name:args.name, identity_no:args.identity_no, phone:args.phone}, owner_type:0, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            let vehicle = {id:args.vid, owner:{id:args.pid, user_id:args.uid, name:args.name, identity_no:args.identity_no, phone:args.phone}, owner_type:0, recommend: args.recommend, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
             engine_no:args.engine_no, average_mileage:args.average_mileage, is_transfer:args.is_transfer, receipt_no:args.receipt_no, receipt_date:args.receipt_date, last_insurance_company:args.last_insurance_company};
             let multi = cache.multi();
             multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));
@@ -108,13 +108,13 @@ processor.call('setVehicleInfoOnCardEnterprise', (db: PGClient, cache: RedisClie
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer,\
-        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12)',[args.vid, args.uid, args.pid, 1, args.vehicle_code, args.license_no, args.engine_no, args.register_date,
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer,\
+        last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)',[args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date,
          args.average_mileage, args.is_transfer,args.last_insurance_company, args.insurance_due_date], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:args.vid, owenr:{id:args.pid, user_id:args.uid, name:name, identity_no:args.identity_no, phone:args.phone}, owner_type:1, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            let vehicle = {id:args.vid, owenr:{id:args.pid, user_id:args.uid, name:name, identity_no:args.identity_no, phone:args.phone}, owner_type:1, recommend: args.recommend, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
             engine_no:args.engine_no, register_date:args.register_date, average_mileage:args.average_mileage, is_transfer:args.is_transfer,last_insurance_company:args.last_insurance_company, insurance_due_date:args.insurance_due_date};
             let multi = cache.multi();
             multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));
@@ -139,13 +139,13 @@ processor.call('setVehicleInfoEnterprise', (db: PGClient, cache: RedisClient, do
       log.error(err, 'query error');
      }else{
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no,\
-        receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12)',[args.vid, args.uid,
-        args.pid, 1, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no,\
+        receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid,
+        args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
           }else{
-            let vehicle = {id:args.vid, owner:{id:args.pid, user_id:args.uid, name:args.name, identity_no:args.identity_no, phone:args.phone}, owner_type:1, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
+            let vehicle = {id:args.vid, owner:{id:args.pid, user_id:args.uid, name:args.name, identity_no:args.identity_no, phone:args.phone}, owner_type:1, recommend: args.recommend, drivers:[], vehicle_code:args.vehicle_code, license_no:args.license_no, 
             engine_no:args.engine_no, average_mileage:args.average_mileage, is_transfer:args.is_transfer, receipt_no:args.receipt_no, receipt_date:args.receipt_date, last_insurance_company:args.last_insurance_company};
             let multi = cache.multi();
             multi.hset("vehicle-entities", args.vid, JSON.stringify(vehicle));

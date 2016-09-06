@@ -107,48 +107,48 @@ svc.call('getUserVehicles', permissions, (ctx: Context, rep: ResponseFunction) =
 
 
 svc.call('setVehicleInfoOnCard', permissions, (ctx: Context, rep: ResponseFunction, name:string,
-identity_no:string, phone:string, vehicle_code:string, license_no:string, engine_no:string, 
+identity_no:string, phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, 
   register_date:string, average_mileage:string, is_transfer:boolean,last_insurance_company:string, insurance_due_date:string) => {
   log.info('setVehicleInfoOnCard %j', ctx);
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, identity_no, phone, ctx.uid, vehicle_code, vid,license_no, engine_no, 
+  let args = [pid, name, identity_no, phone, ctx.uid, recommend, vehicle_code, vid,license_no, engine_no, 
   register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date];
   ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCard", args:args}));
   rep({status: 'okay'});
 });
 
 svc.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, name:string,  identity_no:string,  
-  phone:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
+  phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
   receipt_no:string, receipt_date:string, last_insurance_company:string) => {
   log.info('setVehicleInfo %j', ctx);
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, identity_no, phone, ctx.uid, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
+  let args = [pid, name, identity_no, phone, ctx.uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
    receipt_no, receipt_date, last_insurance_company];
    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
    rep({status: 'okay'});
 });
 
 svc.call('setVehicleInfoOnCardEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name:string,
-society_code:string, contact_name:string, contact_phone:string, vehicle_code:string, license_no:string, engine_no:string, 
+society_code:string, contact_name:string, contact_phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, 
   register_date:string, average_mileage:string, is_transfer:boolean,last_insurance_company:string, insurance_due_date:string) => {
   log.info('setVehicleInfoOnCardEnterprise %j', ctx);
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, vehicle_code, vid,license_no, engine_no, 
+  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, recommend, vehicle_code, vid,license_no, engine_no, 
   register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date];
   ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCardEnterprise", args:args}));
   rep({status: 'okay'});
 });
 
 svc.call('setVehicleInfoEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name:string,
-society_code:string, contact_name:string, contact_phone:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
+society_code:string, contact_name:string, contact_phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
   receipt_no:string, receipt_date:string, last_insurance_company:string) => {
   log.info('setVehicleInfoEnterprise %j', ctx);
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
+  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
    receipt_no, receipt_date, last_insurance_company];
    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoEnterprise", args: args}));
    rep({status: 'okay'});
