@@ -31,7 +31,7 @@ let redis = Redis.createClient(6379, "redis"); // port, host
 let list_key = "vehicle-model";
 let entity_key = "vehicle-model-entities";
 let vehicle_key = "vehicle";
-let vehicle_entities = "vehicle_entities";
+let vehicle_entities = "vehicle-entities";
 
 let config: Config = {
   svraddr: hostmap.default["vehicle"],
@@ -46,30 +46,35 @@ let permissions: Permission[] = [['mobile', true], ['admin', true]];
 
 
 svc.call('getVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, vid:string) => {
-  log.info('getVehicleInfos %j', ctx);
+  log.info('getVehicleInfos vid:' + vid );
   redis.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep([]);
     } else {
-      rep(result);
+      rep(JSON.parse(result));
     }
   });
 });
 
 svc.call('getVehicleInfos', permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info('getVehicleInfos %j', ctx);
-  redis.lrange(vehicle_key, 0 -1, function (err, result) {
+  log.info('getVehicleInfos');
+  redis.lrange(vehicle_key, 0, -1, function (err, result) {
     if (err) {
       rep([]);
     } else {
       let vehicles = [];
+      let multi = redis.multi();
       for (let id of result) {
-        let vehicle = redis.hget(vehicle_entities, id);
-        if(vehicle["user_id"] == ctx.uid){
-          vehicles.push(vehicle)
-        }
+        multi.hget(vehicle_entities, id);
       }
-      rep(vehicles);
+      multi.exec((err,result) => {
+        if(err){
+          rep([]);
+        }else{
+          let vehicles = result.map(e => JSON.parse(e));
+          rep(vehicles);
+        }
+      });
     }
   });
 });
@@ -109,23 +114,25 @@ svc.call('getUserVehicles', permissions, (ctx: Context, rep: ResponseFunction) =
 svc.call('setVehicleInfoOnCard', permissions, (ctx: Context, rep: ResponseFunction, name:string,
 identity_no:string, phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, 
   register_date:string, average_mileage:string, is_transfer:boolean,last_insurance_company:string, insurance_due_date:string) => {
-  log.info('setVehicleInfoOnCard %j', ctx);
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, identity_no, phone, ctx.uid, recommend, vehicle_code, vid,license_no, engine_no, 
-  register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date];
+  let uid = ctx.uid;
+  let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
+  register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date};
+  log.info('setVehicleInfoOnCard ',JSON.stringify(args));
   ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCard", args:args}));
   rep({status: 'okay'});
 });
 
 svc.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, name:string,  identity_no:string,  
-  phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
-  receipt_no:string, receipt_date:string, last_insurance_company:string) => {
-  log.info('setVehicleInfo %j', ctx);
+  phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string,  
+  receipt_no:string, receipt_date:string,average_mileage:string, is_transfer:boolean, last_insurance_company:string) => {
+  
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, identity_no, phone, ctx.uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
-   receipt_no, receipt_date, last_insurance_company];
+  let uid = ctx.uid;
+  let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,receipt_no, receipt_date, last_insurance_company};
+   log.info('setVehicleInfo' + JSON.stringify(args));
    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
    rep({status: 'okay'});
 });
@@ -133,46 +140,53 @@ svc.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, na
 svc.call('setVehicleInfoOnCardEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name:string,
 society_code:string, contact_name:string, contact_phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, 
   register_date:string, average_mileage:string, is_transfer:boolean,last_insurance_company:string, insurance_due_date:string) => {
-  log.info('setVehicleInfoOnCardEnterprise %j', ctx);
+
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, recommend, vehicle_code, vid,license_no, engine_no, 
-  register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date];
+  let uid = ctx.uid;
+  let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
+  register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date};
   ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCardEnterprise", args:args}));
+  log.info('setVehicleInfoOnCardEnterprise', JSON.stringify(args));
   rep({status: 'okay'});
 });
 
 svc.call('setVehicleInfoEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name:string,
-society_code:string, contact_name:string, contact_phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, average_mileage:string, is_transfer:boolean,
-  receipt_no:string, receipt_date:string, last_insurance_company:string) => {
-  log.info('setVehicleInfoEnterprise %j', ctx);
+society_code:string, contact_name:string, contact_phone:string, recommend:string, vehicle_code:string, license_no:string, engine_no:string, receipt_no:string, receipt_date:string, average_mileage:string, is_transfer:boolean,
+   last_insurance_company:string) => {
+
   let pid = uuid.v1();
   let vid = uuid.v1();
-  let args = [pid, name, society_code, contact_name, contact_phone, ctx.uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
-   receipt_no, receipt_date, last_insurance_company];
+  let uid = ctx.uid;
+  let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
+   receipt_no, receipt_date, last_insurance_company};
+  log.info('setVehicleInfoEnterprise', JSON.stringify(args));
    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoEnterprise", args: args}));
+
    rep({status: 'okay'});
 });
 
-svc.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, drivers:{}, vid:string) => {
-  log.info('setDriverInfo %j', ctx);
+svc.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid:string, drivers:{}) => {
+  
   let pid = uuid.v1();
   let did = uuid.v1();
-  let args = [pid, did, vid, drivers]
+  let args = {pid, did, vid, drivers};
+  log.info('setDriverInfo', JSON.stringify(args));
   ctx.msgqueue.send(msgpack.encode({cmd: "setDriverInfo", args:args}));
   rep({status: 'okay'});
 });
 
-svc.call('changeDriverInfo', permissions, (ctx: Context, rep: ResponseFunction,vid:string, pid:string, name:string, identity_no:string, phone:string) => {
-  log.info('changeDriverInfo %j', ctx);
-  let args = [vid, pid,name, identity_no,phone];
+svc.call('changeDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid:string, pid:string, name:string, identity_no:string, phone:string) => {
+ 
+  let args = {vid, pid, name, identity_no, phone};
+   log.info('changeDriverInfo', JSON.stringify(args));
   ctx.msgqueue.send(msgpack.encode({cmd: "changeDriverInfo", args:args}));
   rep({status: 'okay'});
 });
 
 //vehicle_model
 svc.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
-  log.info('getVehicleModelsByMake %j', ctx);
+
   redis.hget(entity_key , vin, function (err, result) {
     if (err) {
       rep([]);
@@ -230,7 +244,8 @@ svc.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
 
 svc.call('uploadDriverImages', permissions, (ctx: Context, rep: ResponseFunction, vid:string, driving_frontal_view:string, 
 driving_rear_view:string, identity_frontal_view:string, identity_rear_view:string, license_frontal_views:{}) => {
-  let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views]
+  let args = {vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views}
+  log.info('uploadDriverImages', JSON.stringify(args));
   ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
 });
 
