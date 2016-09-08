@@ -325,7 +325,7 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
                   log.error(err, 'query error');
                   insert_person_recur(ctx, persons);
                 } else {
-                  ctx.cache.hget("vehicle_entities", ctx.vid, (err, result) => {
+                  ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
                     if (result) {
                       let vehicle = JSON.parse(result);
                       vehicle["drivers"].push({
@@ -334,7 +334,7 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
                         identity_no: person["identity_no"],
                         phone: person["phone"]
                       });
-                      ctx.cache.hset("vehicle_entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
+                      ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
                         insert_person_recur(ctx, persons);
                       });
                     } else {
@@ -515,6 +515,63 @@ processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done
   insert_vehicle_model_recur(ctx, args[0].vehicleList);
 });
 
+function row2model(row: Object) {
+  return {
+    vehicleCode: row["vehicle_code"].trim(),
+    vin: row["vin_code"].trim(),
+    vehicleName: row["vehicle_name"].trim(),
+    brandName: row["brand_name"].trim(),
+    familyName: row["family_name"].trim(),
+    bodyType: row["body_type"].trim(),
+    engineNumber: row["engine_number"].trim(),
+    engineDesc: row["engine_desc"].trim(),
+    gearboxName: row["gearbox_name"].trim(),
+    yearPattern: row["year_pattern"].trim(),
+    groupName: row["group_name"].trim(),
+    cfgLevel: row["cfg_level"].trim(),
+    purchasePrice: row["purchase_price"],
+    purchasePriceTax: row["purchase_price_tax"],
+    seat: row["seat"],
+    effluentStandard: row["effluent_standard"].trim(),
+    pl: row["pl"].trim(),
+    fuelJetType: row["fuel_jet_type"].trim(),
+    drivenType: row["driven_type"].trim() 
+  }
+}
+
+processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction) => {
+  log.info('refresh');
+  db.query('SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model', [], (err: Error, result) => {
+    if (err) {
+      log.error(err, 'query error');
+    } else {
+      let models = [];
+      for (let row of result.rows) {
+        models.push(row2model(row));
+      }
+      let vins = {};
+      for (let row of result.rows) {
+        if (vins.hasOwnProperty(row.vin_code)) {
+          vins[row.vin_code].push(row.vehicle_code);
+        } else {
+          vins[row.vin_code] = [ row.vehicle_code ];
+        }
+      }
+      let multi = cache.multi();
+      for (let model of models) {
+        multi.hset("vehicle-model-entities", models["vehicleCode"], JSON.stringify(models));
+      }
+      for (let vin in vins) {
+        if (vins.hasOwnProperty(vin)) {
+          multi.hset("vehicle-vin-codes", vin, JSON.stringify(vins[vin]));
+        }
+      }
+      multi.exec((err, replies) => {
+        done();
+      });
+    }
+  });
+});
 
 log.info('Start processor at %s', config.addr);
 

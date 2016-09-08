@@ -176,7 +176,7 @@ svr.call('changeDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, 
 svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
   log.info('getVehicleModelsByMake vin: %s', vin);
 
-  redis.hget(entity_key , vin, function (err, result) {
+  redis.hget(entity_key, vin, function (err, result) {
     if (err) {
       rep([]);
     } else {
@@ -230,8 +230,23 @@ svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
         req.write(data);
         req.end();
       } else {
-        rep(JSON.parse(result));
-        //ids2objects(list_key, result, rep);
+        redis.hget("vehicle-vin-codes", vin, (err, result) => {
+          if (result) {
+            let multi = redis.multi();
+            for (let code of JSON.parse(result)) {
+              multi.hget("vehicle-model-entities", code);
+            }
+            multi.exec((err, models) => {
+              if (models) {
+                rep(models.map(e => JSON.parse(e)));
+              } else {
+                rep([]);
+              }
+            });
+          } else {
+            rep([]);
+          }
+        });
       }
     }
   });
