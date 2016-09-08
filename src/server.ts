@@ -178,7 +178,10 @@ svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
 
   redis.hget(entity_key, vin, function (err, result) {
     if (err) {
-      rep([]);
+      rep({
+        errcode: 404,
+        errmsg: "车型没找到"
+      });
     } else {
       if (result == null) {
         let data = JSON.stringify({
@@ -224,7 +227,10 @@ svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
           })
         });
         req.on('error', (e) => {
-          rep(e + "error!请求数据失败!");
+          rep({
+            errcode: 404,
+            errmsg: "车型没找到"
+          });
         });
 
         req.write(data);
@@ -240,11 +246,17 @@ svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
               if (models) {
                 rep(models.map(e => JSON.parse(e)));
               } else {
-                rep([]);
+                rep({
+                  errcode: 404,
+                  errmsg: "车型没找到"
+                });
               }
             });
           } else {
-            rep([]);
+            rep({
+              errcode: 404,
+              errmsg: "车型没找到"
+            });
           }
         });
       }
