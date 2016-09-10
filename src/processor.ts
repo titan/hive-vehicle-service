@@ -19,7 +19,7 @@ let log = bunyan.createLogger({
       path: '/var/log/vehicle-processor-error.log',  // log ERROR and above to a file
       type: 'rotating-file',
       period: '1w',   // daily rotation
-      count: 3        // keep 7 back copies
+      count: 3        // keep 3 back copies
     }
   ]
 });
@@ -510,7 +510,7 @@ processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done
     cache,
     done,
     vin: args[1],
-    models: args[0].vehicelList.map(e => e)
+    models: args[0].vehicleList.map(e => e)
   };
   insert_vehicle_model_recur(ctx, args[0].vehicleList);
 });
@@ -559,7 +559,7 @@ processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction)
       }
       let multi = cache.multi();
       for (let model of models) {
-        multi.hset("vehicle-model-entities", models["vehicleCode"], JSON.stringify(models));
+        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
       }
       for (let vin in vins) {
         if (vins.hasOwnProperty(vin)) {
