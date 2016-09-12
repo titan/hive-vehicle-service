@@ -42,8 +42,19 @@ let svr = new Server(config);
 
 let permissions: Permission[] = [['mobile', true], ['admin', true]];
 
+svr.call('getVehicleModel', permissions, (ctx: Context, rep: ResponseFunction, vehicle_code: string) => {
+  log.info('getVehicleModel vehicle_code:' + vehicle_code + "uid is "+ctx.uid);
+  redis.hget(entity_key, vehicle_code, function (err, result) {
+    if (err) {
+      rep([]);
+    } else {
+      rep(JSON.parse(result));
+    }
+  });
+});
+
 svr.call('getVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
-  log.info('getVehicleInfos vid:' + vid );
+  log.info('getVehicleInfo vid:' + vid  + "uid is "+ctx.uid);
   redis.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep([]);
@@ -54,7 +65,7 @@ svr.call('getVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, vi
 });
 
 svr.call('getVehicleInfos', permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info('getVehicleInfos');
+  log.info('getVehicleInfos' + "uid is "+ctx.uid);
   redis.lrange(vehicle_key, 0, -1, function (err, result) {
     if (err) {
       rep([]);
@@ -77,7 +88,7 @@ svr.call('getVehicleInfos', permissions, (ctx: Context, rep: ResponseFunction) =
 });
 
 svr.call('getDriverPids', permissions, (ctx: Context, rep: ResponseFunction, vid) => {
-  log.info('getDriverPids %j', ctx);
+  log.info('getDriverPids ' + "uid is "+ctx.uid);
     redis.hget(vehicle_entities, vid, function(err, result){
       if (err) {
         rep([]);
@@ -90,7 +101,7 @@ svr.call('getDriverPids', permissions, (ctx: Context, rep: ResponseFunction, vid
 });
 
 svr.call('getUserVehicles', permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info('getUser_Vehicles %j', ctx);
+  log.info('getUser_Vehicles ' + "uid is "+ctx.uid);
     redis.lrange(vehicle_key, 0, -1, function(err, result){
       if (err) {
         rep([]);
@@ -108,50 +119,83 @@ svr.call('getUserVehicles', permissions, (ctx: Context, rep: ResponseFunction) =
 });
 
 
-svr.call('setVehicleInfoOnCard', permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: string, average_mileage: string, is_transfer: boolean,last_insurance_company: string, insurance_due_date: string) => {
-  let pid = uuid.v1();
-  let vid = uuid.v1();
-  let uid = ctx.uid;
-  let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
-    register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date};
-  log.info('setVehicleInfoOnCard ', JSON.stringify(args));
-  ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCard", args:args}));
-  rep({status: 'okay'});
+svr.call('setVehicleInfoOnCard', permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean,last_insurance_company: string, insurance_due_date: any, fuel_type:string) => {
+  if(ctx.uid == null || name == null || identity_no==null || phone==null || vehicle_code==null || license_no==null || engine_no==null || average_mileage==null || is_transfer==null){
+    rep({"status":"有空值"})
+  }else{
+    if(register_date == ''){
+      register_date = null;
+    }
+    if(insurance_due_date == ''){
+      insurance_due_date = null;
+    }
+    let pid = uuid.v1();
+    let vid = uuid.v1();
+    let uid = ctx.uid;
+    let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
+      register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date, fuel_type};
+    log.info('setVehicleInfoOnCard '+ JSON.stringify(args) + "uid is "+ctx.uid);
+    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCard", args:args}));
+    rep(vid);
+  }
+  
 });
 
-svr.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, name: string,  identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, receipt_no: string, receipt_date: string,average_mileage: string, is_transfer: boolean, last_insurance_company: string) => {
-  let pid = uuid.v1();
-  let vid = uuid.v1();
-  let uid = ctx.uid;
-  let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,receipt_no, receipt_date, last_insurance_company};
-  log.info('setVehicleInfo ' + JSON.stringify(args));
-  ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
-  rep({status: 'okay'});
+svr.call('setVehicleInfo', permissions, (ctx: Context, rep: ResponseFunction, name: string,  identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type:string) => {
+  if(ctx.uid == null || name == null || identity_no==null || phone==null || vehicle_code==null || license_no==null || engine_no==null || average_mileage==null || is_transfer==null){
+    rep({"status":"有空值"})
+  }else{
+    if(receipt_date == ''){
+      receipt_date = null;
+    }
+    let pid = uuid.v1();
+    let vid = uuid.v1();
+    let uid = ctx.uid;
+    let args = {pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,receipt_no, receipt_date, last_insurance_company, fuel_type};
+    log.info('setVehicleInfo ' + JSON.stringify(args) + "uid is "+ctx.uid);
+    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfo", args: args}));
+    rep(vid);
+  }
 });
 
-svr.call('setVehicleInfoOnCardEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: string, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: string) => {
-
-  let pid = uuid.v1();
-  let vid = uuid.v1();
-  let uid = ctx.uid;
-  let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
-    register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date};
-  log.info('setVehicleInfoOnCardEnterprise ', JSON.stringify(args));
-  ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCardEnterprise", args:args}));
-  rep({status: 'okay'});
+svr.call('setVehicleInfoOnCardEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: string, fuel_type:string) => {
+  if(ctx.uid == null || name == null || society_code==null || contact_phone==null || contact_name==null || vehicle_code==null || license_no==null || engine_no==null || average_mileage==null || is_transfer==null){
+    rep({"status":"有空值"})
+  }else{
+    if(register_date == ''){
+      register_date = null;
+    }
+    if(insurance_due_date == ''){
+      insurance_due_date = null;
+    }
+    let pid = uuid.v1();
+    let vid = uuid.v1();
+    let uid = ctx.uid;
+    let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid,license_no, engine_no, 
+      register_date, average_mileage, is_transfer,last_insurance_company, insurance_due_date, fuel_type};
+    log.info('setVehicleInfoOnCardEnterprise '+ JSON.stringify(args) + "uid is "+ctx.uid);
+    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoOnCardEnterprise", args:args}));
+    rep(vid);
+  }
 });
 
-svr.call('setVehicleInfoEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, receipt_no: string, receipt_date: string, average_mileage: string, is_transfer: boolean, last_insurance_company: string) => {
+svr.call('setVehicleInfoEnterprise', permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type:string) => {
+  if(ctx.uid == null || name == null || society_code==null || contact_phone==null || contact_name==null || vehicle_code==null || license_no==null || engine_no==null || average_mileage==null || is_transfer==null){
+    rep({"status":"有空值"})
+  }else{
+    if(receipt_date == ''){
+      receipt_date = null;
+    }
+    let pid = uuid.v1();
+    let vid = uuid.v1();
+    let uid = ctx.uid;
+    let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
+      receipt_no, receipt_date, last_insurance_company, fuel_type};
+    log.info('setVehicleInfoEnterprise'+ JSON.stringify(args) + "uid is "+ctx.uid);
+    ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoEnterprise", args: args}));
 
-  let pid = uuid.v1();
-  let vid = uuid.v1();
-  let uid = ctx.uid;
-  let args = {pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid, license_no, engine_no, average_mileage, is_transfer,
-    receipt_no, receipt_date, last_insurance_company};
-  log.info('setVehicleInfoEnterprise', JSON.stringify(args));
-  ctx.msgqueue.send(msgpack.encode({cmd: "setVehicleInfoEnterprise", args: args}));
-
-  rep({status: 'okay'});
+    rep(vid);
+  }
 });
 
 svr.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers:{}) => {
@@ -159,7 +203,7 @@ svr.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid
   let pid = uuid.v1();
   let did = uuid.v1();
   let args = {pid, did, vid, drivers};
-  log.info('setDriverInfo', JSON.stringify(args));
+  log.info('setDriverInfo'+ JSON.stringify(args) + "uid is "+ctx.uid);
   ctx.msgqueue.send(msgpack.encode({cmd: "setDriverInfo", args:args}));
   rep({status: 'okay'});
 });
@@ -167,14 +211,14 @@ svr.call('setDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid
 svr.call('changeDriverInfo', permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string, name: string, identity_no: string, phone: string) => {
 
   let args = {vid, pid, name, identity_no, phone};
-  log.info('changeDriverInfo', JSON.stringify(args));
+  log.info('changeDriverInfo'+ JSON.stringify(args) + "uid is "+ctx.uid);
   ctx.msgqueue.send(msgpack.encode({cmd: "changeDriverInfo", args:args}));
   rep({status: 'okay'});
 });
 
 //vehicle_model
 svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
-  log.info('getVehicleModelsByMake vin: %s', vin);
+  log.info('getVehicleModelsByMake vin: '+ vin + "uid is "+ctx.uid);
 
   redis.hget(entity_key, vin, function (err, result) {
     if (err) {
@@ -266,7 +310,7 @@ svr.call('getVehicleModelsByMake', permissions, (ctx: Context, rep: ResponseFunc
 
 svr.call('uploadDriverImages', permissions, (ctx: Context, rep: ResponseFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views:{}) => {
   let args = {vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views}
-  log.info('uploadDriverImages', JSON.stringify(args));
+  log.info('uploadDriverImages'+ JSON.stringify(args) + "uid is "+ctx.uid);
   ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
 });
 
@@ -281,7 +325,7 @@ function ids2objects(key: string, ids: string[], rep: ResponseFunction) {
 }
 
 svr.call('refresh', permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info('refresh');
+  log.info('refresh' + "uid is "+ctx.uid);
   ctx.msgqueue.send(msgpack.encode({cmd: "refresh", args: null}));
   rep({status: 'okay'});
 });
