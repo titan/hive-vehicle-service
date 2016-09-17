@@ -2,7 +2,8 @@ import { Processor, Config, ModuleFunction, DoneFunction } from 'hive-processor'
 import { Client as PGClient, ResultSet } from 'pg';
 import { createClient, RedisClient} from 'redis';
 import * as bunyan from 'bunyan';
-import * as hostmap from './hostmap'
+import * as hostmap from './hostmap';
+import * as uuid from 'node-uuid';
 
 let log = bunyan.createLogger({
   name: 'vehicle-processor',
@@ -117,7 +118,7 @@ processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFu
         });
       } else {
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)',[args.vid, args.uid, args.pid, 0, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company, args.fuel_type], (err: Error) => {
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid, args.pid, 0, args.recommend, args.vehicle_code, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company, args.fuel_type], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
             db.query('ROLLBACK', [], (err: Error) => {
@@ -142,7 +143,7 @@ processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFu
                   recommend: args.recommend,
                   drivers: [],
                   vehicle_code: args.vehicle_code,
-                  license_no: args.license_no,
+                  // license_no: args.license_no,
                   engine_no: args.engine_no,
                   average_mileage: args.average_mileage,
                   is_transfer: args.is_transfer,
@@ -246,7 +247,7 @@ processor.call('setVehicleInfoEnterprise', (db: PGClient, cache: RedisClient, do
         });
       } else {
         //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company,fuel_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)',[args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company, args.fuel_type], (err: Error) => {
+        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company,fuel_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company, args.fuel_type], (err: Error) => {
           if (err) {
             log.error(err, 'query error');
             db.query('ROLLBACK', [], (err: Error) => {
@@ -271,7 +272,6 @@ processor.call('setVehicleInfoEnterprise', (db: PGClient, cache: RedisClient, do
                   recommend: args.recommend,
                   drivers: [],
                   vehicle_code: args.vehicle_code,
-                  license_no: args.license_no,
                   engine_no: args.engine_no,
                   average_mileage: args.average_mileage,
                   is_transfer: args.is_transfer,
@@ -313,14 +313,16 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
   } else {
     let person = persons.shift();
     ctx.db.query('BEGIN', [], (err: Error) => {
-      ctx.db.query('INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4, $5)', [ctx.pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
+      let pid = uuid.v1();
+      ctx.db.query('INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)', [pid, person["name"], person["identity"], person["phone"]], (err: Error) => {
         if (err) {
           log.error(err, 'query error');
           ctx.db.query('ROLLBACK', [], (err: Error) => {
             insert_person_recur(ctx, []);
           });
         } else {
-          ctx.db.query('INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)', [ctx.did, ctx.vid, ctx.pid, person["is_primary"]], (err: Error) => {
+          let did = uuid.v1();
+          ctx.db.query('INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)', [did, ctx.vid, pid, person["is_primary"]], (err: Error) => {
             if (err) {
               log.error(err, 'query error');
               ctx.db.query('ROLLBACK', [], (err: Error) => {
@@ -336,9 +338,9 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
                     if (result) {
                       let vehicle = JSON.parse(result);
                       vehicle["drivers"].push({
-                        id: ctx.pid,
+                        id: pid,
                         name: person["name"],
-                        identity_no: person["identity_no"],
+                        identity_no: person["identity"],
                         phone: person["phone"]
                       });
                       ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
@@ -488,6 +490,7 @@ function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
     let multi = ctx.cache.multi();
     let codes = [];
     for (let model of ctx.models) {
+      model["vin_code"] = ctx.vin;
       multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
       codes.push(model["vehicleCode"]);
     }
@@ -523,17 +526,25 @@ processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done
 });
 
 function row2model(row: Object) {
+  let engine_number2 = '';
+  let year_pattern = '';
+  if (row["engine_number"] != null){
+    engine_number2 = row["engine_number"].trim();
+  }
+  if (row["year_pattern"] !=null){
+    engine_number2 = row["year_pattern"].trim();
+  }
   return {
     vehicleCode: row["vehicle_code"].trim(),
-    vin: row["vin_code"].trim(),
+    vin_code: row["vin_code"].trim(),
     vehicleName: row["vehicle_name"].trim(),
     brandName: row["brand_name"].trim(),
     familyName: row["family_name"].trim(),
     bodyType: row["body_type"].trim(),
-    engineNumber: row["engine_number"].trim(),
+    engineNumber: engine_number2,
     engineDesc: row["engine_desc"].trim(),
     gearboxName: row["gearbox_name"].trim(),
-    yearPattern: row["year_pattern"].trim(),
+    yearPattern: engine_number2,
     groupName: row["group_name"].trim(),
     cfgLevel: row["cfg_level"].trim(),
     purchasePrice: row["purchase_price"],
