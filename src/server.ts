@@ -326,7 +326,7 @@ function ids2objects(key: string, ids: string[], rep: ResponseFunction) {
 }
 
 svr.call('refresh', permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info('refresh' + "uid is "+ctx.uid);
+  log.info('refresh' + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({cmd: "refresh", args: null}));
   rep({status: 'okay'});
 });

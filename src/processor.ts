@@ -526,34 +526,26 @@ processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done
 });
 
 function row2model(row: Object) {
-  let engine_number2 = '';
-  let year_pattern = '';
-  if (row["engine_number"] != null){
-    engine_number2 = row["engine_number"].trim();
-  }
-  if (row["year_pattern"] !=null){
-    engine_number2 = row["year_pattern"].trim();
-  }
   return {
-    vehicleCode: row["vehicle_code"].trim(),
-    vin_code: row["vin_code"].trim(),
-    vehicleName: row["vehicle_name"].trim(),
-    brandName: row["brand_name"].trim(),
-    familyName: row["family_name"].trim(),
-    bodyType: row["body_type"].trim(),
-    engineNumber: engine_number2,
-    engineDesc: row["engine_desc"].trim(),
-    gearboxName: row["gearbox_name"].trim(),
-    yearPattern: engine_number2,
-    groupName: row["group_name"].trim(),
-    cfgLevel: row["cfg_level"].trim(),
+    vehicleCode: row["vehicle_code"]?row["vehicle_code"].trim(): '',
+    vin_code: row["vin_code"]?row["vin_code"].trim():'',
+    vehicleName: row["vehicle_name"]?row["vehicle_name"].trim():'',
+    brandName: row["brand_name"]?row["brand_name"].trim():'',
+    familyName: row["family_name"]?row["family_name"].trim():'',
+    bodyType: row["body_type"]?row["body_type"].trim():'',
+    engineNumber: row["engineNumber"]?row["engineNumber"].trim():'',
+    engineDesc: row["engine_desc"]?row["engine_desc"].trim():'',
+    gearboxName: row["gearbox_name"]?row["gearbox_name"].trim():'',
+    yearPattern: row["yearPattern"]?row["yearPattern"].trim():'',
+    groupName: row["group_name"]?row["group_name"].trim():'',
+    cfgLevel: row["cfg_level"]?row["cfg_level"].trim():'',
     purchasePrice: row["purchase_price"],
     purchasePriceTax: row["purchase_price_tax"],
     seat: row["seat"],
-    effluentStandard: row["effluent_standard"].trim(),
-    pl: row["pl"].trim(),
-    fuelJetType: row["fuel_jet_type"].trim(),
-    drivenType: row["driven_type"].trim() 
+    effluentStandard: row["effluent_standard"]?row["effluent_standard"].trim():'',
+    pl: row["pl"]?row["pl"].trim():'',
+    fuelJetType: row["fuel_jet_type"]?row["fuel_jet_type"].trim():'',
+    drivenType: row["driven_type"]?row["driven_type"].trim():''
   }
 }
 
@@ -562,6 +554,7 @@ processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction)
   db.query('SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model', [], (err: Error, result) => {
     if (err) {
       log.error(err, 'query error');
+      done();
     } else {
       let models = [];
       for (let row of result.rows) {
@@ -582,9 +575,13 @@ processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction)
       for (let vin in vins) {
         if (vins.hasOwnProperty(vin)) {
           multi.hset("vehicle-vin-codes", vin, JSON.stringify(vins[vin]));
+          multi.sadd("vehicle-model", vin);
         }
       }
       multi.exec((err, replies) => {
+        if(err){
+          log.error("multi err" + err);
+        }
         done();
       });
     }
