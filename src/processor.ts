@@ -1,64 +1,63 @@
-import { Processor, Config, ModuleFunction, DoneFunction } from 'hive-processor';
-import { Client as PGClient, ResultSet } from 'pg';
-import { createClient, RedisClient} from 'redis';
-import * as bunyan from 'bunyan';
-import * as hostmap from './hostmap'
+import { Processor, Config, ModuleFunction, DoneFunction } from "hive-processor";
+import { Client as PGClient, ResultSet } from "pg";
+import { createClient, RedisClient } from "redis";
+import * as bunyan from "bunyan";
 
 let log = bunyan.createLogger({
-  name: 'vehicle-processor',
+  name: "vehicle-processor",
   streams: [
     {
-      level: 'info',
-      path: '/var/log/vehicle-processor-info.log',  // log ERROR and above to a file
-      type: 'rotating-file',
-      period: '1d',   // daily rotation
+      level: "info",
+      path: "/var/log/vehicle-processor-info.log",  // log ERROR and above to a file
+      type: "rotating-file",
+      period: "1d",   // daily rotation
       count: 7        // keep 7 back copies
     },
     {
-      level: 'error',
-      path: '/var/log/vehicle-processor-error.log',  // log ERROR and above to a file
-      type: 'rotating-file',
-      period: '1w',   // daily rotation
+      level: "error",
+      path: "/var/log/vehicle-processor-error.log",  // log ERROR and above to a file
+      type: "rotating-file",
+      period: "1w",   // daily rotation
       count: 3        // keep 3 back copies
     }
   ]
 });
 
 let config: Config = {
-  dbhost: process.env['DB_HOST'],
-  dbuser: process.env['DB_USER'],
-  dbport: process.env['DB_PORT'],
-  database: process.env['DB_NAME'],
-  dbpasswd: process.env['DB_PASSWORD'],
-  cachehost: process.env['CACHE_HOST'],
+  dbhost: process.env["DB_HOST"],
+  dbuser: process.env["DB_USER"],
+  dbport: process.env["DB_PORT"],
+  database: process.env["DB_NAME"],
+  dbpasswd: process.env["DB_PASSWORD"],
+  cachehost: process.env["CACHE_HOST"],
   addr: "ipc:///tmp/vehicle.ipc"
 };
 
 let processor = new Processor(config);
 
-//新车已上牌个人
-processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'setVehicleInfoOnCard');
-  //insert a record into person
-  db.query('BEGIN', [], (err: Error) => {
-    db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)',[args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
+// 新车已上牌个人
+processor.call("setVehicleInfoOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "setVehicleInfoOnCard");
+  // insert a record into person
+  db.query("BEGIN", [], (err: Error) => {
+    db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
       if (err) {
-        log.error(err, 'query error');
-        db.query('ROLLBACK', [], (err: Error) => {
+        log.error(err, "query error");
+        db.query("ROLLBACK", [], (err: Error) => {
           done();
         });
       } else {
-        //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)',[args.vid, args.uid, args.pid, 0, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date, args.average_mileage, args.is_transfer,args.last_insurance_company, args.insurance_due_date], (err: Error) => {
+        // insert a record into vehicle
+        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)", [args.vid, args.uid, args.pid, 0, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date, args.average_mileage, args.is_transfer, args.last_insurance_company, args.insurance_due_date], (err: Error) => {
           if (err) {
-            log.error(err, 'query error');
-            db.query('ROLLBACK', [], (err: Error) => {
+            log.error(err, "query error");
+            db.query("ROLLBACK", [], (err: Error) => {
               done();
             });
           } else {
-            db.query('COMMIT', [], (err: Error) => {
+            db.query("COMMIT", [], (err: Error) => {
               if (err) {
-                log.error(err, 'query error');
+                log.error(err, "query error");
                 done();
               } else {
                 let vehicle = {
@@ -100,29 +99,29 @@ processor.call('setVehicleInfoOnCard', (db: PGClient, cache: RedisClient, done: 
   });
 });
 
-//新车未上牌个人
-processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'setVehicleInfo');
-  db.query('BEGIN', [], (err: Error) => {
-    //insert a record into person
-    db.query('INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)', [args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
+// 新车未上牌个人
+processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "setVehicleInfo");
+  db.query("BEGIN", [], (err: Error) => {
+    // insert a record into person
+    db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [args.pid, args.name, args.identity_no, args.phone], (err: Error) => {
       if (err) {
-        log.error(err, 'query error');
-        db.query('ROLLBACK', [], (err: Error) => {
+        log.error(err, "query error");
+        db.query("ROLLBACK", [], (err: Error) => {
           done();
         });
       } else {
-        //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
+        // insert a record into vehicle
+        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)", [args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
           if (err) {
-            log.error(err, 'query error');
-            db.query('ROLLBACK', [], (err: Error) => {
+            log.error(err, "query error");
+            db.query("ROLLBACK", [], (err: Error) => {
               done();
             });
           } else {
-            db.query('COMMIT', [], (err: Error) => {
+            db.query("COMMIT", [], (err: Error) => {
               if (err) {
-                log.error(err, 'query error');
+                log.error(err, "query error");
                 done();
               } else {
                 let vehicle = {
@@ -157,36 +156,36 @@ processor.call('setVehicleInfo', (db: PGClient, cache: RedisClient, done: DoneFu
                 });
               }
             });
-          }  
+          }
         });
       }
     });
   });
 });
 
-//新车已上牌企业
-processor.call('setVehicleInfoOnCardEnterprise', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'setVehicleInfoOnCardEnterprise');
-  db.query('BEGIN', [], (err: Error) => {
-    //insert a record into person
-    db.query('INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)',[args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
+// 新车已上牌企业
+processor.call("setVehicleInfoOnCardEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "setVehicleInfoOnCardEnterprise");
+  db.query("BEGIN", [], (err: Error) => {
+    // insert a record into person
+    db.query("INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)", [args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
       if (err) {
-        log.error(err, 'query error');
-        db.query('ROLLBACK', [], (err: Error) => {
+        log.error(err, "query error");
+        db.query("ROLLBACK", [], (err: Error) => {
           done();
         });
       } else {
-        //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)', [args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date, args.average_mileage, args.is_transfer,args.last_insurance_company, args.insurance_due_date], (err: Error) => {
+        // insert a record into vehicle
+        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13)", [args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.register_date, args.average_mileage, args.is_transfer, args.last_insurance_company, args.insurance_due_date], (err: Error) => {
           if (err) {
-            log.error(err, 'query error');
-            db.query('ROLLBACK', [], (err: Error) => {
+            log.error(err, "query error");
+            db.query("ROLLBACK", [], (err: Error) => {
               done();
             });
           } else {
-            db.query('COMMIT', [], (err: Error) => {
+            db.query("COMMIT", [], (err: Error) => {
               if (err) {
-                log.error(err, 'query error');
+                log.error(err, "query error");
                 done();
               } else {
                 let vehicle = {
@@ -221,35 +220,35 @@ processor.call('setVehicleInfoOnCardEnterprise', (db: PGClient, cache: RedisClie
                 });
               }
             });
-          }  
+          }
         });
       }
     });
   });
 });
-//新车未上牌企业
-processor.call('setVehicleInfoEnterprise', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'setVehicleInfoEnterprise');
-  db.query('BEGIN', [], (err: Error) => {
-    //insert a record into person
-    db.query('INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)',[args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
+// 新车未上牌企业
+processor.call("setVehicleInfoEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "setVehicleInfoEnterprise");
+  db.query("BEGIN", [], (err: Error) => {
+    // insert a record into person
+    db.query("INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)", [args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
       if (err) {
-        log.error(err, 'query error');
-        db.query('ROLLBACK', [], (err: Error) => {
+        log.error(err, "query error");
+        db.query("ROLLBACK", [], (err: Error) => {
           done();
         });
       } else {
-        //insert a record into vehicle
-        db.query('INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)',[args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
+        // insert a record into vehicle
+        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)", [args.vid, args.uid, args.pid, 1, args.recommend, args.vehicle_code, args.license_no, args.engine_no, args.average_mileage, args.is_transfer, args.receipt_no, args.receipt_date, args.last_insurance_company], (err: Error) => {
           if (err) {
-            log.error(err, 'query error');
-            db.query('ROLLBACK', [], (err: Error) => {
+            log.error(err, "query error");
+            db.query("ROLLBACK", [], (err: Error) => {
               done();
             });
           } else {
-            db.query('COMMIT', [], (err: Error) => {
+            db.query("COMMIT", [], (err: Error) => {
               if (err) {
-                log.error(err, 'query error');
+                log.error(err, "query error");
                 done();
               } else {
                 let vehicle = {
@@ -284,7 +283,7 @@ processor.call('setVehicleInfoEnterprise', (db: PGClient, cache: RedisClient, do
                 });
               }
             });
-          }  
+          }
         });
       }
     });
@@ -301,28 +300,28 @@ interface InsertDriverCtx {
 }
 
 function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
-  if (persons.length == 0) {
+  if (persons.length === 0) {
     ctx.done();
   } else {
     let person = persons.shift();
-    ctx.db.query('BEGIN', [], (err: Error) => {
-      ctx.db.query('INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4, $5)', [ctx.pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
+    ctx.db.query("BEGIN", [], (err: Error) => {
+      ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4, $5)", [ctx.pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
         if (err) {
-          log.error(err, 'query error');
-          ctx.db.query('ROLLBACK', [], (err: Error) => {
+          log.error(err, "query error");
+          ctx.db.query("ROLLBACK", [], (err: Error) => {
             insert_person_recur(ctx, persons);
           });
         } else {
-          ctx.db.query('INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)', [ctx.did, ctx.vid, ctx.pid, person["is_primary"]], (err: Error) => {
+          ctx.db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [ctx.did, ctx.vid, ctx.pid, person["is_primary"]], (err: Error) => {
             if (err) {
-              log.error(err, 'query error');
-              ctx.db.query('ROLLBACK', [], (err: Error) => {
+              log.error(err, "query error");
+              ctx.db.query("ROLLBACK", [], (err: Error) => {
                 insert_person_recur(ctx, persons);
               });
             } else {
-              ctx.db.query('COMMIT', [], (err: Error) => {
+              ctx.db.query("COMMIT", [], (err: Error) => {
                 if (err) {
-                  log.error(err, 'query error');
+                  log.error(err, "query error");
                   insert_person_recur(ctx, persons);
                 } else {
                   ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
@@ -351,8 +350,8 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
   }
 }
 
-processor.call('setDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'setDriverInfo');
+processor.call("setDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "setDriverInfo");
   let ctx = {
     db,
     cache,
@@ -365,19 +364,19 @@ processor.call('setDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFun
   insert_person_recur(ctx, args.drivers);
 });
 
-processor.call('changeDriverInfo', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'changeDriverInfo');
-  db.query('UPDATE person SET name=$1, identity_no=$2, phone=$3 WHERE id=$4', [args.name, args.identity_no, args.phone, args.pid], (err: Error) => {
+processor.call("changeDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "changeDriverInfo");
+  db.query("UPDATE person SET name=$1, identity_no=$2, phone=$3 WHERE id=$4", [args.name, args.identity_no, args.phone, args.pid], (err: Error) => {
     if (err) {
       log.error(err);
       done();
     } else {
       let multi = cache.multi();
-      let vehicle = multi.hget("vehicle-entities",args.vid);
+      let vehicle = multi.hget("vehicle-entities", args.vid);
       let drivers = vehicle["drivers"];
       let new_drivers = [];
       for (let driver of drivers) {
-        if (driver.id != args.pid) {
+        if (driver.id !== args.pid) {
           new_drivers.push(driver);
         }
       }
@@ -408,7 +407,7 @@ interface InsertLicenseViewCtx {
 }
 
 function insert_license_view_recur(ctx, views: any[]) {
-  if (views.length == 0) {
+  if (views.length === 0) {
     ctx.cache.hget("vehicle-entities", ctx.vid, (err, vehicle) => {
       if (err) {
         log.error(err);
@@ -425,7 +424,7 @@ function insert_license_view_recur(ctx, views: any[]) {
     });
   } else {
     let [pid, image] = views.shift();
-    ctx.db.query('UPDATE person SET license_frontal_view=$1 WHERE id = $2)', [image, pid], (err: Error) => {
+    ctx.db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2)", [image, pid], (err: Error) => {
       if (err) {
         log.error(err);
       }
@@ -434,14 +433,14 @@ function insert_license_view_recur(ctx, views: any[]) {
   }
 }
 
-processor.call('uploadDriverImages', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'uploadDriverImages');
-  db.query('UPDATE vehicles SET driving_frontal_view=$1, driving_rear_view=$2 WHERE id=$3', [args.driving_frontal_view, args.driving_rear_view, args.vid], (err: Error) => {
+processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "uploadDriverImages");
+  db.query("UPDATE vehicles SET driving_frontal_view=$1, driving_rear_view=$2 WHERE id=$3", [args.driving_frontal_view, args.driving_rear_view, args.vid], (err: Error) => {
     if (err) {
       log.error(err);
       done();
     } else {
-      db.query('UPDATE person SET identity_frontal_view=$1, identity_rear_view=$2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)', [args.identity_frontal_view, args.identity_rear_view, args.vid], (err: Error) => {
+      db.query("UPDATE person SET identity_frontal_view=$1, identity_rear_view=$2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [args.identity_frontal_view, args.identity_rear_view, args.vid], (err: Error) => {
         if (err) {
           log.error(err);
           done();
@@ -477,7 +476,7 @@ interface InsertModelCtx {
 };
 
 function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
-  if (models.length == 0) {
+  if (models.length === 0) {
     let multi = ctx.cache.multi();
     let codes = [];
     for (let model of ctx.models) {
@@ -494,17 +493,17 @@ function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
     });
   } else {
     let model = models.shift();
-    ctx.db.query('INSERT INTO vehicle_model(vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)', [ model["vehicleCode"], ctx.vin, model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineNumber"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"] ], (err: Error) => {
+    ctx.db.query("INSERT INTO vehicle_model(vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)", [model["vehicleCode"], ctx.vin, model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineNumber"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]], (err: Error) => {
       if (err) {
-        log.error(err, 'query error');
+        log.error(err, "query error");
       }
       insert_vehicle_model_recur(ctx, models);
     });
   }
 }
 
-processor.call('getVehicleModelsByMake', (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-  log.info({args: args}, 'getVehicleModelsByMake');
+processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+  log.info({ args: args }, "getVehicleModelsByMake");
   let ctx = {
     db,
     cache,
@@ -535,15 +534,15 @@ function row2model(row: Object) {
     effluentStandard: row["effluent_standard"].trim(),
     pl: row["pl"].trim(),
     fuelJetType: row["fuel_jet_type"].trim(),
-    drivenType: row["driven_type"].trim() 
-  }
+    drivenType: row["driven_type"].trim()
+  };
 }
 
-processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction) => {
-  log.info('refresh');
-  db.query('SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model', [], (err: Error, result) => {
+processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction) => {
+  log.info("refresh");
+  db.query("SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model", [], (err: Error, result) => {
     if (err) {
-      log.error(err, 'query error');
+      log.error(err, "query error");
     } else {
       let models = [];
       for (let row of result.rows) {
@@ -554,7 +553,7 @@ processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction)
         if (vins.hasOwnProperty(row.vin_code)) {
           vins[row.vin_code].push(row.vehicle_code);
         } else {
-          vins[row.vin_code] = [ row.vehicle_code ];
+          vins[row.vin_code] = [row.vehicle_code];
         }
       }
       let multi = cache.multi();
@@ -573,7 +572,6 @@ processor.call('refresh', (db: PGClient, cache: RedisClient, done: DoneFunction)
   });
 });
 
-log.info('Start processor at %s', config.addr);
+log.info("Start processor at %s", config.addr);
 
 processor.run();
-
