@@ -6,7 +6,7 @@ import * as http from "http";
 import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
 import { servermap, triggermap } from "hive-hostmap";
-import { verify, uuidVerifier, stringVerifier } from "hive-verify";
+import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier } from "hive-verify";
 
 let log = bunyan.createLogger({
   name: "vehicle-server",
@@ -46,6 +46,14 @@ let permissions: Permission[] = [["mobile", true], ["admin", true]];
 // 查看用户上传证件情况
 svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, order_id: string) => {
   log.info("uploadStatus orderid:" + order_id + "uid is " + ctx.uid);
+  if (!verify([uuidVerifier("order_id", order_id)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   redis.hget("order-entities", order_id, function (err, result) {
     if (result) {
       log.info("result===================" + result);
@@ -93,6 +101,14 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
 
 // 获取车型和车的信息
 svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
+  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   log.info("getModelAndVehicleInfo vid:" + vid + "uid is " + ctx.uid);
   let vehicle_info = {};
   redis.hget(vehicle_entities, vid, function (err, result) {
@@ -119,6 +135,14 @@ svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunc
 
 // 获取车型信息
 svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, vehicle_code: string) => {
+  if (!verify([stringVerifier("vehicle_code", vehicle_code)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   log.info("getVehicleModel vehicle_code:" + vehicle_code + "uid is " + ctx.uid);
   redis.hget(entity_key, vehicle_code, function (err, result) {
     if (err) {
@@ -131,6 +155,14 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
 
 // 获取某辆车信息
 svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
+  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   log.info("getVehicleInfo vid:" + vid + "uid is " + ctx.uid);
   redis.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
@@ -168,6 +200,14 @@ svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) =
 // 获取驾驶人信息
 svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
   log.info("getDriverInfos " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
+  if (!verify([uuidVerifier("vid", vid), uuidVerifier("pid", pid)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   redis.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep({ code: 500, msg: "error" });
@@ -196,50 +236,56 @@ svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vi
 
 // 添加车信息上牌车
 svr.call("setVehicleInfoOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
-  log.info("register_date===================:" + register_date);
-  if (ctx.uid === null || register_date === null || name === null || identity_no === null || phone === null || vehicle_code === null || license_no === null || engine_no === null || average_mileage === null || is_transfer === null) {
-    rep({ "status": "有空值" });
-  } else {
-    if (register_date === "") {
-      register_date = null;
-    }
-    if (insurance_due_date === "") {
-      insurance_due_date = null;
-    }
-    let pid = uuid.v1();
-    let vid = uuid.v1();
-    let uid = ctx.uid;
-    let args = {
-      pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
-      register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
-    };
-    log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
-    ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCard", args: args }));
-    rep(vid);
+  log.info("setVehicleInfoOnCard: " + ctx.uid);
+  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
   }
-
+  let pid = uuid.v1();
+  let vid = uuid.v1();
+  let uid = ctx.uid;
+  let args = [
+    pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
+  ];
+  log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCard", args: args }));
+  rep(vid);
 });
 
 // 添加车信息
 svr.call("setVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string) => {
-  if (ctx.uid === null || name === null || identity_no === null || phone === null || vehicle_code === null || engine_no === null || average_mileage === null || is_transfer === null) {
-    rep({ "status": "有空值" });
-  } else {
-    if (receipt_date === "") {
-      receipt_date = null;
-    }
-    let pid = uuid.v1();
-    let vid = uuid.v1();
-    let uid = ctx.uid;
-    let args = { pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type };
-    log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
-    ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfo", args: args }));
-    rep(vid);
+  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
   }
+  let pid = uuid.v1();
+  let vid = uuid.v1();
+  let uid = ctx.uid;
+  let args = [ pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type ];
+  log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfo", args: args }));
+  rep(vid);
 });
 
 // 添加驾驶员信息
 svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
+  if (!verify([uuidVerifier("vid", vid), arrayVerifier("drivers", drivers)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   let pids = [];
   let dids = [];
   for (let d of drivers) {
@@ -248,7 +294,7 @@ svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid
     pids.push(pid);
     dids.push(did);
   }
-  let args = { pids, dids, vid, drivers };
+  let args = [ pids, dids, vid, drivers ];
   log.info("setDriverInfo" + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriverInfo", args: args }));
   rep(pids);
@@ -257,7 +303,14 @@ svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid
 // vehicle_model
 svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
   log.info("getVehicleModelsByMake vin: " + vin + "uid is " + ctx.uid);
-
+  if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
   redis.hget(entity_key, vin, function (err, result) {
     if (err) {
       rep({
@@ -348,33 +401,37 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
 
 svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: {}) => {
   log.info("uploadDriverImages");
-  if (vid === null || driving_frontal_view === null || driving_rear_view === null || identity_frontal_view === null || identity_rear_view === null || license_frontal_views === null) {
-    rep({ code: 400, msg: "不允许空值！！" });
-  } else {
-    redis.hget(vehicle_entities, vid, function (err, result) {
-      if (err) {
-        rep([]);
-      } else {
-        let vehicle = JSON.parse(result);
-        let ownerid = vehicle.owner.id;
-        log.info("ownerid--------------------" + ownerid);
-        let flag = false;
-        for (let view in license_frontal_views) {
-          log.info("view--------------------" + view);
-          if (ownerid === view) {
-            flag = true;
-          }
-        }
-        if (!flag) {
-          rep({ code: 400, msg: "主要驾驶人照片未空！！" });
-        } else {
-          let args = { vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views };
-          log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-          // ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
+  if (!verify([uuidVerifier("vid", vid), stringVerifier("driving_frontal_view", driving_frontal_view), stringVerifier("driving_rear_view", driving_rear_view), stringVerifier("identity_frontal_view", identity_frontal_view), stringVerifier("identity_rear_view", identity_rear_view), objectVerifier("license_frontal_views", license_frontal_views)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+  redis.hget(vehicle_entities, vid, function (err, result) {
+    if (err) {
+      rep([]);
+    } else {
+      let vehicle = JSON.parse(result);
+      let ownerid = vehicle.owner.id;
+      log.info("ownerid--------------------" + ownerid);
+      let flag = false;
+      for (let view in license_frontal_views) {
+        log.info("view--------------------" + view);
+        if (ownerid === view) {
+          flag = true;
         }
       }
-    });
-  }
+      if (!flag) {
+        rep({ code: 400, msg: "主要驾驶人照片未空！！" });
+      } else {
+        let args = [ vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views ];
+        log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
+        ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
+      }
+    }
+  });
 });
 
 // 获取用户车信息
