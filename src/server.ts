@@ -248,10 +248,10 @@ svr.call("setVehicleInfoOnCard", permissions, (ctx: Context, rep: ResponseFuncti
   let pid = uuid.v1();
   let vid = uuid.v1();
   let uid = ctx.uid;
-  let args = {
+  let args = [
     pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
     register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
-  };
+  ];
   log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCard", args: args }));
   rep(vid);
@@ -270,7 +270,7 @@ svr.call("setVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, na
   let pid = uuid.v1();
   let vid = uuid.v1();
   let uid = ctx.uid;
-  let args = { pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type };
+  let args = [ pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type ];
   log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfo", args: args }));
   rep(vid);
@@ -294,7 +294,7 @@ svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid
     pids.push(pid);
     dids.push(did);
   }
-  let args = { pids, dids, vid, drivers };
+  let args = [ pids, dids, vid, drivers ];
   log.info("setDriverInfo" + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriverInfo", args: args }));
   rep(pids);
@@ -426,9 +426,9 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
       if (!flag) {
         rep({ code: 400, msg: "主要驾驶人照片未空！！" });
       } else {
-        let args = { vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views };
+        let args = [ vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views ];
         log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-        // ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
+        ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
       }
     }
   });
