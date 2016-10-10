@@ -232,7 +232,7 @@ processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFu
 //                 });
 //               }
 //             });
-//           }  
+//           }
 //         });
 //       }
 //     });
@@ -295,7 +295,7 @@ processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFu
 //                 });
 //               }
 //             });
-//           }  
+//           }
 //         });
 //       }
 //     });
@@ -412,98 +412,113 @@ processor.call("setDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFun
 //   });
 // });
 
-interface InsertLicenseViewCtx {
-  driving_frontal_view: string;
-  driving_rear_view: string;
-  vid: string;
-  cache: RedisClient;
-  db: PGClient;
-  done: DoneFunction;
-}
-
-function insert_license_view_recur(ctx, views: any[]) {
-  if (views.length === 0) {
-    ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
+processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
+  log.info("uploadDriverImages");
+  let pbegin = new Promise<void>((resolve, reject) => {
+    db.query("BEGIN", [], (err: Error) => {
       if (err) {
         log.error(err);
-        ctx.done();
-      } if (result) {
-        let vehicle = JSON.parse(result);
-        vehicle["driving_frontal_view"] = ctx.driving_frontal_view;
-        vehicle["driving_rear_view"] = ctx.driving_rear_view;
-        vehicle["owner"]["identity_frontal_view"] = ctx.identity_frontal_view;
-        vehicle["owner"]["identity_rear_view"] = ctx.identity_rear_view;
-        vehicle["owner"]["license_frontal_views"] = ctx.license_views[0][1];
-        if (ctx.license_views.length > 1) {
-          let drivers = [];
-          for (let driver of vehicle["drivers"]) {
-            for (let license_view of ctx.license_views) {
-              if (driver.id === license_view[0] && driver.id !== vehicle["owner"].id) {
-                driver["license_view"] = license_view[1];
-              }
-            }
-            drivers.push(driver);
-          }
-          log.info("dirvers--------------" + drivers);
-          vehicle["drivers"] = drivers;
-        }
-        ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, reply) => {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+  let pvehicles = new Promise<void>((resolve, reject) => {
+    db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid], (err: Error) => {
+      if (err) {
+        log.error(err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+  let pperson = new Promise<void>((resolve, reject) => {
+    db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid], (err: Error) => {
+      if (err) {
+        log.error(err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+  let pcommit = new Promise<void>((resolve, reject) => {
+    db.query("COMMIT", [], (err: Error) => {
+      if (err) {
+        log.info(err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+  let ps = [pbegin, pvehicles, pperson];
+  for (let key in license_frontal_views) {
+    if (license_frontal_views.hasOwnProperty(key)) {
+      let p = new Promise<void>((resolve, reject) => {
+        db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key], (err: Error) => {
           if (err) {
-            log.info(err);
+            log.error(err);
+            reject(err);
+          } else {
+            resolve();
           }
-          ctx.done();
+        });
+      });
+      ps.push(p);
+    }
+  }
+  ps.push(pcommit);
+
+  async_serial<void>(ps, [], () => {
+    cache.hget("vehicle-entities", vid, (err, vehiclejson) => {
+      if (err) {
+        log.error(err);
+        cache.setex(callback, 30, JSON.stringify({
+          code: 500,
+          msg: err.message
+        }));
+        done();
+      } else if (vehiclejson) {
+        const vehicle = JSON.parse(vehiclejson);
+        vehicle["driving_frontal_view"] = driving_frontal_view;
+        vehicle["driving_rear_view"] = driving_rear_view;
+        cache.hset("vehicle-entities", vid, JSON.stringify(vehicle), (err1, reply) => {
+          if (err1) {
+            cache.setex(callback, 30, JSON.stringify({
+              code: 500,
+              msg: err1.message
+            }));
+          } else {
+            cache.setex(callback, 30, JSON.stringify({
+              code: 200,
+              msg: "Success"
+            }));
+          }
+          done();
         });
       } else {
-        ctx.done();
+        cache.setex(callback, 30, JSON.stringify({
+          code: 404,
+          msg: "Vehicle not found"
+        }));
+        done();
       }
     });
-  } else {
-    let [pid, image] = views.shift();
-    ctx.db.query("UPDATE person SET license_frontal_view = $1 WHERE id = $2 ", [image, pid], (err: Error) => {
+  }, (e: Error) => {
+    db.query("ROLLBACK", [], (err: Error) => {
       if (err) {
         log.error(err);
       }
-      insert_license_view_recur(ctx, views);
-    });
-  }
-}
-
-processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: any, callback: string) => {
-  log.info("uploadDriverImages");
-  db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid], (err: Error) => {
-    if (err) {
-      log.error(err);
+      log.error(e, e.message);
+      cache.setex(callback, 30, JSON.stringify({
+        code: 500,
+        msg: e.message
+      }));
       done();
-    } else {
-      db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid], (err: Error) => {
-        if (err) {
-          log.error(err);
-          done();
-        } else {
-          let views = [];
-          for (let key in license_frontal_views) {
-            if (license_frontal_views.hasOwnProperty(key)) {
-              views.push([key, license_frontal_views[key]]);
-            }
-          }
-          let license_views = [];
-          Object.assign(license_views, views);
-          let ctx = {
-            db,
-            cache,
-            done,
-            driving_frontal_view: driving_frontal_view,
-            driving_rear_view: driving_rear_view,
-            identity_frontal_view: identity_frontal_view,
-            identity_rear_view: identity_rear_view,
-            license_views: license_views,
-            vid: vid
-          };
-
-          insert_license_view_recur(ctx, views);
-        }
-      });
-    }
+    });
   });
 });
 

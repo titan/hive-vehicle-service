@@ -1,5 +1,5 @@
 import { Server, Config, Context, ResponseFunction, Permission, rpc, wait_for_response } from "hive-server";
-import * as Redis from "redis";
+import { RedisClient } from "redis";
 import * as nanomsg from "nanomsg";
 import * as msgpack from "msgpack-lite";
 import * as http from "http";
@@ -28,7 +28,6 @@ let log = bunyan.createLogger({
   ]
 });
 
-let redis = Redis.createClient(6379, "redis"); // port, host
 let list_key = "vehicle-model";
 let entity_key = "vehicle-model-entities";
 let vehicle_key = "vehicle";
@@ -36,7 +35,8 @@ let vehicle_entities = "vehicle-entities";
 
 let config: Config = {
   svraddr: servermap["vehicle"],
-  msgaddr: "ipc:///tmp/vehicle.ipc"
+  msgaddr: "ipc:///tmp/vehicle.ipc",
+  cacheaddr: process.env["CACHE_HOST"]
 };
 
 let svr = new Server(config);
@@ -54,11 +54,11 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
   })) {
     return;
   }
-  redis.hget("order-entities", order_id, function (err, result) {
+  ctx.cache.hget("order-entities", order_id, function (err, result) {
     if (result) {
       log.info("result===================" + result);
       let vid = JSON.parse(result).vehicle.vehicle.id;
-      redis.hget(vehicle_entities, vid, function (err2, result2) {
+      ctx.cache.hget(vehicle_entities, vid, function (err2, result2) {
         if (err2) {
           rep({ code: 500, msg: err2 });
         } else {
@@ -111,14 +111,14 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
 //   }
 //   log.info("getModelAndVehicleInfo vid:" + vid + "uid is " + ctx.uid);
 //   let vehicle_info = {};
-//   redis.hget(vehicle_entities, vid, function (err, result) {
+//   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
 //     if (err) {
 //       rep([]);
 //     } else {
 //       if (result !== null) {
 //         vehicle_info["vehicle"] = JSON.parse(result);
 //         let vehicle_code = JSON.parse(result).vehicle_code;
-//         redis.hget(entity_key, vehicle_code, function (err2, result2) {
+//         ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
 //           if (err2) {
 //             rep([]);
 //           } else {
@@ -142,13 +142,13 @@ svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunc
     return;
   }
   log.info("getModelAndVehicleInfo vid:" + vid + "uid is " + ctx.uid);
-  redis.hget(vehicle_entities, vid, function (err, result) {
+  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep({ code: 500, msg: err });
     } else {
       if (result !== null) {
         let vehicle_code = JSON.parse(result).vehicle_code;
-        redis.hget(entity_key, vehicle_code, function (err2, result2) {
+        ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
           if (err2) {
             rep({ code: 500, msg: err2 });
           } else if (result2) {
@@ -180,7 +180,7 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
     return;
   }
   log.info("getVehicleModel vehicle_code:" + vehicle_code + "uid is " + ctx.uid);
-  redis.hget(entity_key, vehicle_code, function (err, result) {
+  ctx.cache.hget(entity_key, vehicle_code, function (err, result) {
     if (err) {
       rep([]);
     } else {
@@ -200,7 +200,7 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
     return;
   }
   log.info("getVehicleInfo vid:" + vid + "uid is " + ctx.uid);
-  redis.hget(vehicle_entities, vid, function (err, result) {
+  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep([]);
     } else {
@@ -212,12 +212,12 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
 // 获取所有车信息
 svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getVehicleInfos" + "uid is " + ctx.uid);
-  redis.lrange(vehicle_key, 0, -1, function (err, result) {
+  ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
     if (err) {
       rep([]);
     } else {
       let vehicles = [];
-      let multi = redis.multi();
+      let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
       }
@@ -244,7 +244,7 @@ svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vi
   })) {
     return;
   }
-  redis.hget(vehicle_entities, vid, function (err, result) {
+  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep({ code: 500, msg: "error" });
     } else {
@@ -347,7 +347,7 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
   })) {
     return;
   }
-  redis.hget(entity_key, vin, function (err, result) {
+  ctx.cache.hget(entity_key, vin, function (err, result) {
     if (err) {
       rep({
         errcode: 404,
@@ -407,9 +407,9 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
         req.write(data);
         req.end();
       } else {
-        redis.hget("vehicle-vin-codes", vin, (err, result) => {
+        ctx.cache.hget("vehicle-vin-codes", vin, (err, result) => {
           if (result) {
-            let multi = redis.multi();
+            let multi = ctx.cache.multi();
             for (let code of JSON.parse(result)) {
               multi.hget("vehicle-model-entities", code);
             }
@@ -456,28 +456,26 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
   //   "f4653190-87e2-11e6-8909-efcc5d8da516": "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg",
   // };
   log.info("license_frontal_views:" + license_frontal_views);
-  redis.hget(vehicle_entities, vid, function (err, result) {
+  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
-      rep({ code: 500, msg: err });
+      rep({ code: 500, msg: err.message });
     } else if (result) {
       let vehicle = JSON.parse(result);
       let ownerid = vehicle.owner.id;
-      log.info("ownerid--------------------" + ownerid);
       let flag = false;
       for (let view in license_frontal_views) {
-        log.info("view--------------------" + view);
         if (ownerid === view) {
           flag = true;
         }
       }
       if (!flag) {
-        rep({ code: 400, msg: "主要驾驶人照片未空！！" });
+        rep({ code: 400, msg: "主要驾驶人照片为空！！" });
       } else {
-        let callback = uuid.v1()
-        let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
+        let callback = uuid.v1();
+        let args = [ vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback ];
         log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-        ctx.msgqueue.send(msgpack.encode({ cmd: "uploadDriverImages", args: args }));
-        // wait_for_response(ctx.cache, callback, rep);
+        ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
+        wait_for_response(ctx.cache, callback, rep);
       }
     } else {
       rep({ code: 404, msg: "Vehicle not found" });
@@ -488,9 +486,9 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
 // 获取用户车信息
 svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getUser_Vehicles uid is " + ctx.uid);
-  redis.lrange(vehicle_key, 0, -1, function (err, result) {
+  ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
     if (result) {
-      let multi = redis.multi();
+      let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
       }
@@ -535,8 +533,8 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
 });
 
 
-function ids2objects(key: string, ids: string[], rep: ResponseFunction) {
-  let multi = redis.multi();
+function ids2objects(cache: RedisClient, key: string, ids: string[], rep: ResponseFunction) {
+  let multi = cache.multi();
   for (let id of ids) {
     multi.hget(key, id);
   }
@@ -553,7 +551,7 @@ function ids2objects(key: string, ids: string[], rep: ResponseFunction) {
 
 // svr.call("uploadStatus", permissions, (ctx:Context, rep: ResponseFunction, vid:string) => {
 //   log.info("uploadStatus uid is " + ctx.uid);
-//   redis.hget(vehicle_entities, vid, function (err, result){
+//   ctx.cache.hget(vehicle_entities, vid, function (err, result){
 //     if (err) {
 //       rep({code:500, msg:err});
 //     } else {
