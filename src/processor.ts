@@ -148,6 +148,7 @@ processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFu
                   drivers: [],
                   vehicle_code: vehicle_code,
                   engine_no: engine_no,
+                  license_no: null,
                   average_mileage: average_mileage,
                   is_transfer: is_transfer,
                   receipt_no: receipt_no,
@@ -422,14 +423,34 @@ interface InsertLicenseViewCtx {
 
 function insert_license_view_recur(ctx, views: any[]) {
   if (views.length === 0) {
-    ctx.cache.hget("vehicle-entities", ctx.vid, (err, vehicle) => {
+    ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
       if (err) {
         log.error(err);
         ctx.done();
-      } if (vehicle) {
+      } if (result) {
+        let vehicle = JSON.parse(result);
         vehicle["driving_frontal_view"] = ctx.driving_frontal_view;
         vehicle["driving_rear_view"] = ctx.driving_rear_view;
+        vehicle["owner"]["identity_frontal_view"] = ctx.identity_frontal_view;
+        vehicle["owner"]["identity_rear_view"] = ctx.identity_rear_view;
+        vehicle["owner"]["license_frontal_views"] = ctx.license_views[0][1];
+        if (ctx.license_views.length > 1) {
+          let drivers = [];
+          for (let driver of vehicle["drivers"]) {
+            for (let license_view of ctx.license_views) {
+              if (driver.id === license_view[0] && driver.id !== vehicle["owner"].id) {
+                driver["license_view"] = license_view[1];
+              }
+            }
+            drivers.push(driver);
+          }
+          log.info("dirvers--------------" + drivers);
+          vehicle["drivers"] = drivers;
+        }
         ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, reply) => {
+          if (err) {
+            log.info(err);
+          }
           ctx.done();
         });
       } else {
@@ -438,7 +459,7 @@ function insert_license_view_recur(ctx, views: any[]) {
     });
   } else {
     let [pid, image] = views.shift();
-    ctx.db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2)", [image, pid], (err: Error) => {
+    ctx.db.query("UPDATE person SET license_frontal_view = $1 WHERE id = $2 ", [image, pid], (err: Error) => {
       if (err) {
         log.error(err);
       }
@@ -447,7 +468,7 @@ function insert_license_view_recur(ctx, views: any[]) {
   }
 }
 
-processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: any) => {
+processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: any, callback: string) => {
   log.info("uploadDriverImages");
   db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid], (err: Error) => {
     if (err) {
@@ -465,12 +486,17 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
               views.push([key, license_frontal_views[key]]);
             }
           }
+          let license_views = [];
+          Object.assign(license_views, views);
           let ctx = {
             db,
             cache,
             done,
             driving_frontal_view: driving_frontal_view,
             driving_rear_view: driving_rear_view,
+            identity_frontal_view: identity_frontal_view,
+            identity_rear_view: identity_rear_view,
+            license_views: license_views,
             vid: vid
           };
 
