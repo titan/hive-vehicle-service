@@ -157,7 +157,7 @@ svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunc
             Object.assign(v, vehicle);
             v["vehicle_model"] = JSON.parse(result2);
             v["vehicle"] = vehicle;
-            rep(v);
+            rep({ code: 200, data: v });
           } else {
             rep({ code: 404, msg: "not found vehicle model" })
           }
@@ -181,10 +181,10 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
   }
   log.info("getVehicleModel vehicle_code:" + vehicle_code + "uid is " + ctx.uid);
   ctx.cache.hget(entity_key, vehicle_code, function (err, result) {
-    if (err) {
-      rep([]);
+    if (err || result === null) {
+      rep({ code: 500, msg: "未知错误" });
     } else {
-      rep(JSON.parse(result));
+      rep({ code: 200, result: JSON.parse(result) });
     }
   });
 });
@@ -201,10 +201,10 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
   }
   log.info("getVehicleInfo vid:" + vid + "uid is " + ctx.uid);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err) {
-      rep([]);
+    if (err || result === null) {
+      rep({ code: 404, msg: "not found" });
     } else {
-      rep(JSON.parse(result));
+      rep({ code: 200, result: JSON.parse(result) });
     }
   });
 });
@@ -213,8 +213,8 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
 svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getVehicleInfos" + "uid is " + ctx.uid);
   ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
-    if (err) {
-      rep([]);
+    if (err || result === null) {
+      rep({ code: 200, msg: "not found" });
     } else {
       let vehicles = [];
       let multi = ctx.cache.multi();
@@ -222,11 +222,11 @@ svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) =
         multi.hget(vehicle_entities, id);
       }
       multi.exec((err, result) => {
-        if (err) {
-          rep([]);
+        if (err || result === null) {
+          rep({ code: 404, msg: "not found" });
         } else {
           let vehicles = result.map(e => JSON.parse(e));
-          rep(vehicles);
+          rep({ code: 200, data: vehicles });
         }
       });
     }
@@ -261,7 +261,7 @@ svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vi
         if (result2 === null) {
           rep({ code: 404, msg: "not found driver" });
         } else {
-          rep(result2);
+          rep({ code: 200, data: result2 });
         }
       } else {
         rep({ code: 404, msg: "not found vehicle" });
@@ -290,7 +290,7 @@ svr.call("setVehicleInfoOnCard", permissions, (ctx: Context, rep: ResponseFuncti
   ];
   log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCard", args: args }));
-  rep(vid);
+  rep({ code: 200, data: vid });
 });
 
 // 添加车信息
@@ -309,7 +309,7 @@ svr.call("setVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, na
   let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type];
   log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfo", args: args }));
-  rep(vid);
+  rep({ code: 200, data: vid });
 });
 
 // 添加驾驶员信息
@@ -333,7 +333,7 @@ svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid
   let args = [pids, dids, vid, drivers];
   log.info("setDriverInfo" + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriverInfo", args: args }));
-  rep(pids);
+  rep({ code: 200, data: pids });
 });
 
 // vehicle_model
@@ -386,11 +386,11 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
             let args = arg.result;
             if (args) {
               ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-              rep(args.vehicleList);
+              rep({ code: 200, data: args.vehicleList });
             } else {
               rep({
-                errcode: 404,
-                errmsg: "车型没找到"
+                code: 404,
+                msg: "车型没找到"
               });
             }
           });
@@ -399,8 +399,8 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
         });
         req.on("error", (e) => {
           rep({
-            errcode: 404,
-            errmsg: "车型没找到"
+            code: 404,
+            msg: "车型没找到"
           });
         });
 
@@ -415,18 +415,18 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
             }
             multi.exec((err, models) => {
               if (models) {
-                rep(models.map(e => JSON.parse(e)));
+                rep({ code: 200, data: models.map(e => JSON.parse(e)) });
               } else {
                 rep({
-                  errcode: 404,
-                  errmsg: "车型没找到"
+                  code: 404,
+                  msg: "车型没找到"
                 });
               }
             });
           } else {
             rep({
-              errcode: 404,
-              errmsg: "车型没找到"
+              code: 404,
+              msg: "车型没找到"
             });
           }
         });
@@ -472,9 +472,9 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
         rep({ code: 400, msg: "主要驾驶人照片为空！！" });
       } else {
         let callback = uuid.v1();
-        let args = [ vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback ];
+        let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
         log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-        ctx.msgqueue.send(msgpack.encode({cmd: "uploadDriverImages", args: args}));
+        ctx.msgqueue.send(msgpack.encode({ cmd: "uploadDriverImages", args: args }));
         wait_for_response(ctx.cache, callback, rep);
       }
     } else {
@@ -539,7 +539,7 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: Respon
     multi.hget(key, id);
   }
   multi.exec(function (err, replies) {
-    rep(replies);
+    rep({ code: 200, data: replies });
   });
 }
 

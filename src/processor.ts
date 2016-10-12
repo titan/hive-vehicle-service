@@ -619,6 +619,15 @@ function row2vehicle(row: Object) {
   };
 }
 
+
+
+// processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction) => {
+//   log.info("refresh");
+//   db.query("SELECT id, user_id, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_real_view, created_at, updated_at, recommend, fuel_type FROM vehicles", [], (err2: Error, result2) => {
+//   });
+// });
+
+
 // processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction) => {
 //   log.info("refresh");
 //   db.query("SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model", [], (err: Error, result) => {
@@ -635,7 +644,7 @@ function row2vehicle(row: Object) {
 //         if (vins.hasOwnProperty(row.vin_code)) {
 //           vins[row.vin_code].push(row.vehicle_code);
 //         } else {
-//           vins[row.vin_code] = [ row.vehicle_code ];
+//           vins[row.vin_code] = [row.vehicle_code];
 //         }
 //       }
 //       let multi = cache.multi();
@@ -649,16 +658,16 @@ function row2vehicle(row: Object) {
 //         }
 //       }
 //       multi.exec((err, replies) => {
-//         if(err){
+//         if (err) {
 //           log.error("multi err" + err);
 //           done();
-//         }else{
+//         } else {
 //           db.query("SELECT id, user_id, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_real_view, created_at, updated_at, recommend, fuel_type FROM vehicles", [], (err2: Error, result2) => {
 //             if (err2) {
 //               log.error(err2, "query error");
 //               done();
 //             } else {
-//               db.query("SELECT id, name, identity_no, phone, identity_front_view, identity_rear_view, license_frontal_view, license_rear_view, created_at, updated_at FROM person", [],  (err3: Error, result3) => {
+//               db.query("SELECT id, name, identity_no, phone, identity_front_view, identity_rear_view, license_frontal_view, license_rear_view, created_at, updated_at FROM person", [], (err3: Error, result3) => {
 //                 if (err3) {
 //                   log.error(err3, "query error");
 //                   done();
@@ -679,7 +688,7 @@ function row2vehicle(row: Object) {
 
 //                       }
 //                       let multi = cache.multi();
-//                       for(let vehicle of vehicles){
+//                       for (let vehicle of vehicles) {
 
 //                       }
 //                     }
