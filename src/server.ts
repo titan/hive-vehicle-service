@@ -184,7 +184,7 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
     if (err || result === null) {
       rep({ code: 500, msg: "未知错误" });
     } else {
-      rep({ code: 200, result: JSON.parse(result) });
+      rep({ code: 200, data: JSON.parse(result) });
     }
   });
 });
@@ -204,7 +204,7 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
     if (err || result === null) {
       rep({ code: 404, msg: "not found" });
     } else {
-      rep({ code: 200, result: JSON.parse(result) });
+      rep({ code: 200, data: JSON.parse(result) });
     }
   });
 });
