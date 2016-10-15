@@ -132,7 +132,7 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
 //     }
 //   });
 // });
-svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
+svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
     rep({
       code: 400,
@@ -190,7 +190,7 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
 });
 
 // 获取某辆车信息
-svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
+svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
     rep({
       code: 400,
@@ -210,7 +210,7 @@ svr.call("getVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vi
 });
 
 // 获取所有车信息
-svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) => {
+svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getVehicleInfos" + "uid is " + ctx.uid);
   ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
     if (err || result === null) {
@@ -234,7 +234,7 @@ svr.call("getVehicleInfos", permissions, (ctx: Context, rep: ResponseFunction) =
 });
 
 // 获取驾驶人信息
-svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
+svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
   log.info("getDriverInfos " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
   if (!verify([uuidVerifier("vid", vid), uuidVerifier("pid", pid)], (errors: string[]) => {
     rep({
@@ -271,7 +271,7 @@ svr.call("getDriverInfos", permissions, (ctx: Context, rep: ResponseFunction, vi
 });
 
 // 添加车信息上牌车
-svr.call("setVehicleInfoOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
+svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
   log.info("setVehicleInfoOnCard: " + ctx.uid);
   if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
     rep({
@@ -289,12 +289,12 @@ svr.call("setVehicleInfoOnCard", permissions, (ctx: Context, rep: ResponseFuncti
     register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
   ];
   log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
-  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCard", args: args }));
+  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleOnCard", args: args }));
   rep({ code: 200, data: vid });
 });
 
 // 添加车信息
-svr.call("setVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string) => {
+svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string) => {
   if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
     rep({
       code: 400,
@@ -308,12 +308,12 @@ svr.call("setVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, na
   let uid = ctx.uid;
   let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type];
   log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
-  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfo", args: args }));
+  ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicle", args: args }));
   rep({ code: 200, data: vid });
 });
 
 // 添加驾驶员信息
-svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
+svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
   if (!verify([uuidVerifier("vid", vid), arrayVerifier("drivers", drivers)], (errors: string[]) => {
     rep({
       code: 400,
@@ -332,7 +332,7 @@ svr.call("setDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid
   }
   let args = [pids, dids, vid, drivers];
   log.info("setDriverInfo" + args + "uid is " + ctx.uid);
-  ctx.msgqueue.send(msgpack.encode({ cmd: "setDriverInfo", args: args }));
+  ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
   rep({ code: 200, data: pids });
 });
 
@@ -350,8 +350,8 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
   ctx.cache.hget(entity_key, vin, function (err, result) {
     if (err) {
       rep({
-        errcode: 404,
-        errmsg: "车型没找到"
+        code: 404,
+        msg: "车型没找到"
       });
     } else {
       if (result === null) {
@@ -543,6 +543,15 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: Respon
   });
 }
 
+
+svr.call("refresh_vehicle", permissions, (ctx: Context, rep: ResponseFunction) => {
+  log.info("refresh");
+  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh_vehicle", args: [ctx.domain] }));
+  rep({
+    code: 200,
+    msg: "Okay"
+  });
+});
 // svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
 //   log.info("refresh" + "uid is " + ctx.uid);
 //   ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: null }));

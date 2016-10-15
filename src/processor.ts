@@ -41,7 +41,7 @@ let config: Config = {
 let processor = new Processor(config);
 
 // 新车已上牌个人
-processor.call("setVehicleInfoOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
+processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
   register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
   log.info("setVehicleInfoOnCard");
   // insert a record into person
@@ -110,7 +110,7 @@ processor.call("setVehicleInfoOnCard", (db: PGClient, cache: RedisClient, done: 
 });
 
 // 新车未上牌个人
-processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string) => {
+processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string) => {
   log.info("setVehicleInfo");
   db.query("BEGIN", [], (err: Error) => {
     // insert a record into person
@@ -365,7 +365,7 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
   }
 }
 
-processor.call("setDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, pids: any, dids: any, vid: string, drivers: any) => {
+processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, pids: any, dids: any, vid: string, drivers: any) => {
   log.info("setDriverInfo");
   let ctx = {
     db,
@@ -621,11 +621,137 @@ function row2vehicle(row: Object) {
 
 
 
-// processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction) => {
-//   log.info("refresh");
-//   db.query("SELECT id, user_id, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_real_view, created_at, updated_at, recommend, fuel_type FROM vehicles", [], (err2: Error, result2) => {
-//   });
-// });
+
+
+function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
+  return new Promise<void>((resolve, reject) => {
+    db.query("SELECT v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS, v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_registeer_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_real_view AS v_driving_real_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, d.pid AS d_pid FROM drivers AS d LEFT JOIN vehicles AS v ON v.id = d.vid", [], (e: Error, result: ResultSet) => {
+      if (e) {
+        reject(e);
+      } else {
+        const vehicles = [];
+        for (const row of result.rows) {
+          if (vehicles.hasOwnProperty(row.v_id)) {
+            vehicles[row.v_id]["drivers"].push(row.d_pid);
+          } else {
+            const vehicle = {
+              id: row.v_id,
+              user_id: row.v_user_id,
+              owner: row.v_owner,
+              owner_type: row.v_owner_type,
+              vehicle_code: row.v_vehicle_code,
+              license_no: row.v_license_no,
+              engine_no: row.v_engine_no,
+              register_date: row.v_receipt_data,
+              average_mileage: row.v_average_mileage,
+              drivers: [],
+              pids: [row.d_pid],
+              model: {},
+              is_transfer: row.v_is_transfer,
+              receipt_no: row.v_receipt_no,
+              receipt_date: row.v_receipt_data,
+              last_insurance_company: row.v_last_insurance_company,
+              insurance_due_date: row.v_insurance_due_date,
+              driving_frontal_view: row.v_driving_frontal_view,
+              driving_real_view: row.v_driving_real_view,
+              created_at: row.v_created_at,
+              updated_at: row.v_updated_at,
+              recommend: row.v_recommend,
+              fuel_type: row.v_fuel_type
+            };
+            vehicles[row.v_id] = vehicle;
+          }
+        }
+        let pds = Object.keys(vehicles).reduce((acc, vid) => {
+          const vehicle = vehicles[vid];
+          for (const pid of vehicle.pids) {
+            db.query("SELECT id, name, identity_no, phone, identity_front_view, identity_rear_view, license_frontal_view, license_rear_view, created_at, updated_at FROM person WHERE id = $1", [pid], (err1: Error, result1) => {
+              if (err1) {
+                log.error(err1, "query error");
+                reject(e);
+              } else {
+                let driver = {
+                  id: result1.id,
+                  name: result1.name,
+                  identity_no: result1.identity_no,
+                  phone: result1.phone,
+                  identity_front_view: result1.identity_front_view,
+                  identity_rear_view: result1.identity_rear_view,
+                  license_frontal_view: result1.license_frontal_view,
+                  license_rear_view: result1.license_rear_view
+                };
+                acc.push(driver);
+              }
+            });
+          }
+          return acc;
+        }, []);
+        async_serial_ignore<Object>(pds, [], (drivers) => {
+          for (const driver of drivers) {
+            for (const vid of Object.keys(vehicles)) {
+              const vehicle = vehicles[vid];
+              for (const drv of vehicle.drivers) {
+                if (drv === driver["id"]) {
+                  vehicle.drivers.push(driver);
+                  break;
+                }
+              }
+            }
+          }
+        });
+        for (let vehicle of vehicles) {
+          db.query("SELECT vehicle_code, vin_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model WHERE vehicle_code = $1", [vehicle.vehicle_code], (err2: Error, result2) => {
+            if (err2) {
+              log.error(err2, "query error");
+              reject(e);
+            } else {
+              let model = {
+                vehicle_code: result2.vehicle_code,
+                vin_code: result2.vin_code,
+                vehicle_name: result2.vehicle_name,
+                brand_name: result2.brand_name,
+                family_name: result2.family_name,
+                body_type: result2.body_type,
+                engine_number: result2.engine_number,
+                engine_desc: result2.engine_desc,
+                gearbox_name: result2.gearbox_name,
+                year_pattern: result2.year_pattern,
+                group_name: result2.group_name,
+                cfg_level: result2.cfg_level,
+                purchase_price: result2.purchase_price,
+                purchase_price_tax: result2.purchase_price_tax,
+                seat: result2.seat,
+                effluent_standard: result2.effluent_standard,
+                pl: result2.pl,
+                fuel_jet_type: result2.fuel_jet_type,
+                driven_type: result2.driven_type
+              };
+              vehicle.model === model;
+            }
+          });
+        }
+        const multi = cache.multi();
+        for (const vid of Object.keys(vehicles)) {
+          const vehicle = vehicles[vid];
+          delete vehicle["pids"];
+          multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+          multi.lpush("vehicle", vid);
+          multi.hset("vehicle-vin-codes", vehicle["model"]["vin_code"], JSON.stringify(vehicle["model"]));
+          multi.sadd("vehicle-model", vehicle["model"]["vin_code"]);
+        }
+        multi.exec((err: Error, _: any[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      }
+    });
+  });
+}
+
+
 
 
 // processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction) => {
