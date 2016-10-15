@@ -41,9 +41,9 @@ let config: Config = {
 let processor = new Processor(config);
 
 // 新车已上牌个人
-processor.call("setVehicleInfoOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
+processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
   register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
-  log.info("setVehicleInfoOnCard");
+  log.info("setVehicleOnCard");
   // insert a record into person
   db.query("BEGIN", [], (err: Error) => {
     db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone], (err: Error) => {
@@ -110,8 +110,8 @@ processor.call("setVehicleInfoOnCard", (db: PGClient, cache: RedisClient, done: 
 });
 
 // 新车未上牌个人
-processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string) => {
-  log.info("setVehicleInfo");
+processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string) => {
+  log.info("setVehicle");
   db.query("BEGIN", [], (err: Error) => {
     // insert a record into person
     db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone], (err: Error) => {
@@ -175,8 +175,8 @@ processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFu
 });
 
 // 新车已上牌企业
-// processor.call("setVehicleInfoOnCardEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-//   log.info({args: args}, "setVehicleInfoOnCardEnterprise");
+// processor.call("setVehicleOnCardEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+//   log.info({args: args}, "setVehicleOnCardEnterprise");
 //   db.query("BEGIN", [], (err: Error) => {
 //     //insert a record into person
 //     db.query("INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)",[args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
@@ -239,8 +239,8 @@ processor.call("setVehicleInfo", (db: PGClient, cache: RedisClient, done: DoneFu
 //   });
 // });
 // 新车未上牌企业
-// processor.call("setVehicleInfoEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-//   log.info({args: args}, "setVehicleInfoEnterprise");
+// processor.call("setVehicleEnterprise", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+//   log.info({args: args}, "setVehicleEnterprise");
 //   db.query("BEGIN", [], (err: Error) => {
 //     //insert a record into person
 //     db.query("INSERT INTO enterprise_owner (id, name, society_code, contact_name, contact_phone) VALUES ($1, $2, $3, $4, $5)",[args.pid, args.name, args.society_code, args.contact_name, args.contact_phone], (err: Error) => {
@@ -365,8 +365,8 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
   }
 }
 
-processor.call("setDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, pids: any, dids: any, vid: string, drivers: any) => {
-  log.info("setDriverInfo");
+processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, pids: any, dids: any, vid: string, drivers: any) => {
+  log.info("setDriver");
   let ctx = {
     db,
     cache,
@@ -379,8 +379,8 @@ processor.call("setDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFun
   insert_person_recur(ctx, drivers);
 });
 
-// processor.call("changeDriverInfo", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
-//   log.info({args: args}, "changeDriverInfo");
+// processor.call("changeDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, args) => {
+//   log.info({args: args}, "changeDriver");
 //   db.query("UPDATE person SET name=$1, identity_no=$2, phone=$3 WHERE id=$4", [args.name, args.identity_no, args.phone, args.pid], (err: Error) => {
 //     if (err) {
 //       log.error(err);
