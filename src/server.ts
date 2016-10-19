@@ -211,7 +211,7 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
 
 // 获取所有车信息
 svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info("getVehicleInfos" + "uid is " + ctx.uid);
+  log.info("getVehicles" + "uid is " + ctx.uid);
   ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
     if (err || result === null) {
       rep({ code: 200, msg: "not found" });

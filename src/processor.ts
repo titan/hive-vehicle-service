@@ -639,7 +639,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
               id: row.v_id,
               user_id: row.v_user_id,
               owid: row.v_owner,
-              owner: [],
+              owner: {},
               owner_type: trim(row.v_owner_type),
               vehicle_code: trim(row.v_vehicle_code),
               license_no: trim(row.v_license_no),
@@ -673,7 +673,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
               receipt_no: row.v_receipt_no,
               receipt_date: row.v_receipt_data,
               last_insurance_company: trim(row.v_last_insurance_company),
-              insurance_due_date: trim(row.v_insurance_due_date),
+              insurance_due_date: row.v_insurance_due_date,
               driving_frontal_view: trim(row.v_driving_frontal_view),
               driving_real_view: trim(row.v_driving_real_view),
               created_at: row.v_created_at,
@@ -705,10 +705,27 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
             }
           }
         }
+        for (let vid of vids) {
+          for (let driver of vehicles[vid]["drivers"]) {
+            if (driver != null) {
+              if (vehicles[vid]["owid"] == driver["id"]) {
+                vehicles[vid]["owner"]["id"] === driver["id"];
+                vehicles[vid]["owner"]["name"] === driver["name"];
+                vehicles[vid]["owner"]["identity_no"] === driver["identity_no"];
+                vehicles[vid]["owner"]["phone"] === driver["phone"];
+                vehicles[vid]["owner"]["identity_front_view"] === driver["identity_front_view"];
+                vehicles[vid]["owner"]["identity_rear_view"] === driver["identity_rear_view"];
+                vehicles[vid]["owner"]["license_frontal_view"] === driver["license_frontal_view"];
+                vehicles[vid]["owner"]["license_rear_view"] === driver["license_rear_view"];
+              }
+            }
+          }
+        }
         const multi = cache.multi();
         for (const vid of Object.keys(vehicles)) {
           const vehicle = vehicles[vid];
           delete vehicle["pids"];
+          delete vehicle["owid"];
           log.info(JSON.stringify(vehicle) + "vehicle==========")
           multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
           multi.lpush("vehicle", vid);
