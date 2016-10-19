@@ -141,7 +141,7 @@ svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction
   })) {
     return;
   }
-  log.info("getModelAndVehicleInfo vid:" + vid + "uid is " + ctx.uid);
+  log.info("getModelAndVehicle vid:" + vid + "uid is " + ctx.uid);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep({ code: 500, msg: err });
@@ -159,7 +159,7 @@ svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction
             v["vehicle"] = vehicle;
             rep({ code: 200, data: v });
           } else {
-            rep({ code: 404, msg: "not found vehicle model" })
+            rep({ code: 404, msg: "not found vehicle model" });
           }
         });
       } else {
@@ -184,7 +184,7 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
     if (err || result === null) {
       rep({ code: 500, msg: "未知错误" });
     } else {
-      rep({ code: 200, result: JSON.parse(result) });
+      rep({ code: 200, data: JSON.parse(result) });
     }
   });
 });
@@ -204,7 +204,7 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
     if (err || result === null) {
       rep({ code: 404, msg: "not found" });
     } else {
-      rep({ code: 200, result: JSON.parse(result) });
+      rep({ code: 200, data: JSON.parse(result) });
     }
   });
 });
@@ -508,7 +508,7 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
               for (let i = 0; i < vehicles2.length; i++) {
                 vehicles2[i]["vehicle_model"] = vehicle_models[i];
               }
-              rep({ code: 200, vehicles: vehicles2 })
+              rep({ code: 200, vehicles: vehicles2 });
             } else if (err3) {
               log.info(err3);
               rep({ code: 500, msg: err3 });
@@ -544,9 +544,9 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: Respon
 }
 
 
-svr.call("refresh_vehicle", permissions, (ctx: Context, rep: ResponseFunction) => {
+svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("refresh");
-  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh_vehicle", args: [ctx.domain] }));
+  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: [ctx.domain] }));
   rep({
     code: 200,
     msg: "Okay"
