@@ -100,38 +100,6 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
 });
 
 // 获取车型和车的信息
-// svr.call("getModelAndVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
-//   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-//     rep({
-//       code: 400,
-//       msg: errors.join("\n")
-//     });
-//   })) {
-//     return;
-//   }
-//   log.info("getModelAndVehicleInfo vid:" + vid + "uid is " + ctx.uid);
-//   let vehicle_info = {};
-//   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-//     if (err) {
-//       rep([]);
-//     } else {
-//       if (result !== null) {
-//         vehicle_info["vehicle"] = JSON.parse(result);
-//         let vehicle_code = JSON.parse(result).vehicle_code;
-//         ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
-//           if (err2) {
-//             rep([]);
-//           } else {
-//             vehicle_info["vehicle_model"] = JSON.parse(result2);
-//             rep(vehicle_info);
-//           }
-//         });
-//       } else {
-//         rep({ code: 404, msg: "Not Found" });
-//       }
-//     }
-//   });
-// });
 svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
     rep({
@@ -144,7 +112,9 @@ svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction
   log.info("getModelAndVehicle vid:" + vid + "uid is " + ctx.uid);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
-      rep({ code: 500, msg: err });
+      rep({ code: 500, msg: err.message });
+    } else if (result) {
+      rep({ code: 200, data: JSON.parse(result) });
     } else {
       if (result !== null) {
         let vehicle_code = JSON.parse(result).vehicle_code;
@@ -246,7 +216,7 @@ svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction, start
 
 // 获取驾驶人信息
 svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
-  log.info("getDriverInfos " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
+  log.info("getDrivers " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
   if (!verify([uuidVerifier("vid", vid), uuidVerifier("pid", pid)], (errors: string[]) => {
     rep({
       code: 400,
@@ -283,7 +253,7 @@ svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: s
 
 // 添加车信息上牌车
 svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
-  log.info("setVehicleInfoOnCard: " + ctx.uid);
+  log.info("setVehicleOnCard: " + ctx.uid);
   if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
     rep({
       code: 400,
@@ -299,7 +269,7 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
     pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
     register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
   ];
-  log.info("setVehicleInfoOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
+  log.info("setVehicleOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleOnCard", args: args }));
   rep({ code: 200, data: vid });
 });
@@ -318,7 +288,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
   let vid = uuid.v1();
   let uid = ctx.uid;
   let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type];
-  log.info("setVehicleInfo " + JSON.stringify(args) + "uid is " + ctx.uid);
+  log.info("setVehicle " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicle", args: args }));
   rep({ code: 200, data: vid });
 });
@@ -342,7 +312,7 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
     dids.push(did);
   }
   let args = [pids, dids, vid, drivers];
-  log.info("setDriverInfo" + args + "uid is " + ctx.uid);
+  log.info("setDriver" + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
   rep({ code: 200, data: pids });
 });
@@ -563,33 +533,6 @@ svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
     msg: "Okay"
   });
 });
-// svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
-//   log.info("refresh" + "uid is " + ctx.uid);
-//   ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: null }));
-//   rep({ status: "okay" });
-// });
-
-// svr.call("uploadStatus", permissions, (ctx:Context, rep: ResponseFunction, vid:string) => {
-//   log.info("uploadStatus uid is " + ctx.uid);
-//   ctx.cache.hget(vehicle_entities, vid, function (err, result){
-//     if (err) {
-//       rep({code:500, msg:err});
-//     } else {
-//       if (result !==null) {
-//         let vehicle = JSON.parse(result);
-//         let num = 0;
-//         if (vehicle.driving_frontal_view !== null || vehicle.driving_frontal_view !== ""){
-//           num ++;
-//         }
-//         if (vehicle.driving_rear_view !== null || vehicle.driving_rear_view !== ""){
-//           num ++;
-//         }
-
-
-//       }
-//     }
-//   })
-// });
 
 // 修改驾驶人信息
 // svr.call("changeDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string, name: string, identity_no: string, phone: string) => {
