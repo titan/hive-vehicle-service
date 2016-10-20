@@ -625,7 +625,7 @@ function row2vehicle(row: Object) {
 function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
   log.info("refresh_vehicle");
   return new Promise<void>((resolve, reject) => {
-    db.query("SELECT v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_registeer_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_rear_view AS v_driving_rear_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, d.pid AS d_pid , m.vehicle_code AS m_vehicle_code, m.vin_code AS m_vin_code, m.vehicle_name AS m_vehicle_name, m.brand_name AS m_brand_name, m.family_name AS m_family_name, m.body_type AS m_body_type, m.engine_number AS m_engine_number, m.engine_desc AS m_engine_desc, m.gearbox_name AS m_gearbox_name, m.year_pattern AS m_year_pattern, m.group_name AS m_group_name, m.cfg_level AS m_cfg_level, m.purchase_price AS m_purchase_price, m.purchase_price_tax AS m_purchase_price_tax, m.seat AS m_seat, m.effluent_standard AS m_effluent_standard, m.pl AS m_pl, m.fuel_jet_type AS m_fuel_jet_type, m.driven_type AS m_driven_type,p.id AS p_id, p.name AS p_name, p.identity_no AS p_identity, p.phone AS p_phone, p.identity_frontal_view AS p_identity_frontal_view, p.identity_rear_view AS p_identity_rear_view, p.license_frontal_view AS p_license_frontal_view, p.license_rear_view AS p_license_rear_view FROM vehicles AS v LEFT JOIN drivers AS d ON v.id = d.vid LEFT JOIN vehicle_model AS m ON v.vehicle_code = m.vehicle_code LEFT JOIN person AS p ON d.pid = p.id", [], (e: Error, result: ResultSet) => {
+    db.query("SELECT v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_registeer_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_rear_view AS v_driving_rear_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, d.pid AS d_pid , m.vehicle_code AS m_vehicle_code, m.vin_code AS m_vin_code, m.vehicle_name AS m_vehicle_name, m.brand_name AS m_brand_name, m.family_name AS m_family_name, m.body_type AS m_body_type, m.engine_number AS m_engine_number, m.engine_desc AS m_engine_desc, m.gearbox_name AS m_gearbox_name, m.year_pattern AS m_year_pattern, m.group_name AS m_group_name, m.cfg_level AS m_cfg_level, m.purchase_price AS m_purchase_price, m.purchase_price_tax AS m_purchase_price_tax, m.seat AS m_seat, m.effluent_standard AS m_effluent_standard, m.pl AS m_pl, m.fuel_jet_type AS m_fuel_jet_type, m.driven_type AS m_driven_type,p.id AS p_id, p.name AS p_name, p.identity_no AS p_identity, p.phone AS p_phone, p.identity_frontal_view AS p_identity_frontal_view, p.identity_rear_view AS p_identity_rear_view, p.license_frontal_view AS p_license_frontal_view, p.license_rear_view AS p_license_rear_view FROM vehicles AS v LEFT JOIN drivers AS d ON v.id = d.vid LEFT JOIN vehicle_model AS m ON v.vehicle_code = m.vehicle_code LEFT JOIN person AS p ON d.pid = p.id or v.owner = p.id", [], (e: Error, result: ResultSet) => {
       if (e) {
         reject(e);
         log.info("err : SELECT query error" + e);
@@ -706,17 +706,17 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           }
         }
         for (let vid of vids) {
-          for (let driver of vehicles[vid]["drivers"]) {
-            if (driver != null) {
-              if (vehicles[vid]["owid"] == driver["id"]) {
-                vehicles[vid]["owner"]["id"] === driver["id"];
-                vehicles[vid]["owner"]["name"] === driver["name"];
-                vehicles[vid]["owner"]["identity_no"] === driver["identity_no"];
-                vehicles[vid]["owner"]["phone"] === driver["phone"];
-                vehicles[vid]["owner"]["identity_front_view"] === driver["identity_front_view"];
-                vehicles[vid]["owner"]["identity_rear_view"] === driver["identity_rear_view"];
-                vehicles[vid]["owner"]["license_frontal_view"] === driver["license_frontal_view"];
-                vehicles[vid]["owner"]["license_rear_view"] === driver["license_rear_view"];
+          if (vehicles[vid]["owid"] !== null) {
+            for (let row of result.rows) {
+              if (vehicles[vid]["owid"] = row.p_id) {
+                  vehicles[vid]["owner"].id = row.p_id,
+                  vehicles[vid]["owner"].name = trim(row.p_name),
+                  vehicles[vid]["owner"].identity_no = trim(row.p_identity_no),
+                  vehicles[vid]["owner"].phone = row.p_phone,
+                  vehicles[vid]["owner"].identity_front_view = trim(row.p_identity_front_view),
+                  vehicles[vid]["owner"].identity_rear_view = trim(row.p_identity_rear_view),
+                  vehicles[vid]["owner"].license_frontal_view = trim(row.p_license_frontal_view),
+                  vehicles[vid]["owner"].license_rear_view = trim(row.p_license_rear_view)
               }
             }
           }
