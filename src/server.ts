@@ -192,6 +192,7 @@ svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, v
 // 获取某辆车信息
 svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+    log.info("vid is not match");
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -199,36 +200,46 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
   })) {
     return;
   }
-  log.info("getVehicleInfo vid:" + vid + "uid is " + ctx.uid);
+  log.info("getVehicle vid:" + vid + "uid is " + ctx.uid);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err || result === null) {
-      rep({ code: 404, msg: "not found" });
-    } else {
+    if (err) {
+      rep({ code: 500, msg: err });
+    } else if (result) {
+      log.info("result==========" + result);
       rep({ code: 200, data: JSON.parse(result) });
+    } else {
+      rep({ code: 404, msg: "not found" });
     }
   });
 });
 
 // 获取所有车信息
-svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
+svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction, start: number, limit: number) => {
   log.info("getVehicles" + "uid is " + ctx.uid);
-  ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
-    if (err || result === null) {
-      rep({ code: 200, msg: "not found" });
-    } else {
-      let vehicles = [];
+  ctx.cache.lrange(vehicle_key, start, limit, function (err, result) {
+    if (err) {
+      rep({ code: 500, msg: err });
+    } else if (result) {
+      let vehicles: any;
       let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
       }
-      multi.exec((err, result) => {
-        if (err || result === null) {
-          rep({ code: 404, msg: "not found" });
-        } else {
-          let vehicles = result.map(e => JSON.parse(e));
+      multi.exec((err2, result2) => {
+        if (err2) {
+          log.info(err);
+          rep({ code: 500, msg: err2 });
+        } else if (result2) {
+          // log.info(result2);
+          let vehicles = result2.map(e => JSON.parse(e));
           rep({ code: 200, data: vehicles });
+        } else {
+          log.info("not found vehicle");
+          rep({ code: 404, msg: "vehicle not found" });
         }
       });
+    } else {
+      rep({ code: 404, msg: "vehicle keys not found" });
     }
   });
 });
