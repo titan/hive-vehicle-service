@@ -98,7 +98,6 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
                   } else {
                     done();
                   }
-
                 });
               }
             });

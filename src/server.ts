@@ -489,7 +489,7 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
               for (let i = 0; i < vehicles2.length; i++) {
                 vehicles2[i]["vehicle_model"] = vehicle_models[i];
               }
-              rep({ code: 200, vehicles: vehicles2 });
+              rep({ code: 200, data: vehicles2 });
             } else if (err3) {
               log.info(err3);
               rep({ code: 500, msg: err3 });
