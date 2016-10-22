@@ -484,6 +484,16 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
         const vehicle = JSON.parse(vehiclejson);
         vehicle["driving_frontal_view"] = driving_frontal_view;
         vehicle["driving_rear_view"] = driving_rear_view;
+        vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
+        vehicle["owner"]["identity_rear_view"] = identity_rear_view;
+        vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
+        for (let key in license_frontal_views) {
+          for (let driver of vehicle["drivers"]) {
+            if (driver["id"] === key) {
+              driver["license_view"] = license_frontal_views[key];
+            }
+          }
+        }
         cache.hset("vehicle-entities", vid, JSON.stringify(vehicle), (err1, reply) => {
           if (err1) {
             cache.setex(callback, 30, JSON.stringify({
@@ -708,7 +718,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           if (vehicles[vid]["owid"] !== null) {
             for (let row of result.rows) {
               if (vehicles[vid]["owid"] = row.p_id) {
-                  vehicles[vid]["owner"].id = row.p_id,
+                vehicles[vid]["owner"].id = row.p_id,
                   vehicles[vid]["owner"].name = trim(row.p_name),
                   vehicles[vid]["owner"].identity_no = trim(row.p_identity_no),
                   vehicles[vid]["owner"].phone = row.p_phone,
