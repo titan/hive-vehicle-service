@@ -114,27 +114,23 @@ svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction
     if (err) {
       rep({ code: 500, msg: err.message });
     } else if (result) {
-      rep({ code: 200, data: JSON.parse(result) });
+      let vehicle_code = JSON.parse(result).vehicle_code;
+      ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
+        if (err2) {
+          rep({ code: 500, msg: err2 });
+        } else if (result2) {
+          let vehicle = JSON.parse(result);
+          let v = {};
+          Object.assign(v, vehicle);
+          v["vehicle_model"] = JSON.parse(result2);
+          v["vehicle"] = vehicle;
+          rep({ code: 200, data: v });
+        } else {
+          rep({ code: 404, msg: "not found vehicle model" });
+        }
+      });
     } else {
-      if (result !== null) {
-        let vehicle_code = JSON.parse(result).vehicle_code;
-        ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
-          if (err2) {
-            rep({ code: 500, msg: err2 });
-          } else if (result2) {
-            let vehicle = JSON.parse(result);
-            let v = {};
-            Object.assign(v, vehicle);
-            v["vehicle_model"] = JSON.parse(result2);
-            v["vehicle"] = vehicle;
-            rep({ code: 200, data: v });
-          } else {
-            rep({ code: 404, msg: "not found vehicle model" });
-          }
-        });
-      } else {
-        rep({ code: 404, msg: "Not found vehicle" });
-      }
+      rep({ code: 404, msg: "Not found vehicle" });
     }
   });
 });
