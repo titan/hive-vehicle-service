@@ -88,14 +88,26 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
                   insurance_due_date: insurance_due_date,
                   fuel_type: fuel_type
                 };
-                let multi = cache.multi();
-                multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-                multi.lpush("vehicle", vid);
-                multi.exec((err, replies) => {
+                cache.hget("vehicle-model-entities", vehicle_code, function (err, result) {
                   if (err) {
-                    log.error(err + "vehicle:" + vehicle);
+                    log.info(err);
                     done();
+                  } else if (result) {
+                    vehicle["vehicle_model"] = JSON.parse(result);
+                    let multi = cache.multi();
+                    multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+                    multi.lpush("vehicle-" + uid, vid);
+                    multi.lpush("vehicle", vid);
+                    multi.exec((err2, replies) => {
+                      if (err2) {
+                        log.error(err + "vehicle:" + vehicle);
+                        done();
+                      } else {
+                        done();
+                      }
+                    });
                   } else {
+                    log.info("not found vehicle_model");
                     done();
                   }
                 });
@@ -155,14 +167,28 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
                   last_insurance_company: last_insurance_company,
                   fuel_type: fuel_type
                 };
-                let multi = cache.multi();
-                multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-                multi.lpush("vehicle", vid);
-                multi.exec((err, replies) => {
+                cache.hget("vehicle-model-entities", vehicle_code, function (err, result) {
                   if (err) {
-                    log.error(err);
+                    log.info(err);
+                    done();
+                  } else if (result) {
+                    vehicle["vehicle_model"] = JSON.parse(result);
+                    let multi = cache.multi();
+                    multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+                    multi.lpush("vehicle-" + uid, vid);
+                    multi.lpush("vehicle", vid);
+                    multi.exec((err2, replies) => {
+                      if (err2) {
+                        log.error(err + "vehicle:" + vehicle);
+                        done();
+                      } else {
+                        done();
+                      }
+                    });
+                  } else {
+                    log.info("not found vehicle_model");
+                    done();
                   }
-                  done();
                 });
               }
             });
@@ -658,28 +684,28 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
               drivers: [],
               pids: [row.d_pid],
               vehicle_model: {
-                vehicle_code: trim(row.m_vehicle_code),
+                vehicleCode: trim(row.m_vehicle_code),
                 vin_code: trim(row.m_vin_code),
-                vehicle_name: trim(row.m_vehicle_name),
-                brand_name: trim(row.m_brand_name),
-                family_name: trim(row.m_family_name),
-                body_type: trim(row.m_body_type),
-                engine_number: trim(row.m_engine_number),
-                engine_desc: trim(row.m_engine_desc),
-                gearbox_name: trim(row.m_gearbox_name),
-                year_pattern: trim(row.m_year_pattern),
-                group_name: trim(row.m_group_name),
-                cfg_level: trim(row.m_cfg_level),
-                purchase_price: row.m_purchase_price,
-                purchase_price_tax: row.m_purchase_price_tax,
+                vehicleName: trim(row.m_vehicle_name),
+                brandName: trim(row.m_brand_name),
+                familyName: trim(row.m_family_name),
+                bodyType: trim(row.m_body_type),
+                engineNumber: trim(row.m_engine_number),
+                engineDesc: trim(row.m_engine_desc),
+                gearboxName: trim(row.m_gearbox_name),
+                yearPattern: trim(row.m_year_pattern),
+                groupName: trim(row.m_group_name),
+                cfgLevel: trim(row.m_cfg_level),
+                purchasePrice: row.m_purchase_price,
+                purchasePriceTax: row.m_purchase_price_tax,
                 seat: row.m_seat,
-                effluent_standard: row.m_effluent_standard,
-                pl: row.m_pl,
-                fuel_jet_type: row.m_fuel_jet_type,
-                driven_type: row.m_driven_type
+                effluentStandard: trim(row.m_effluent_standard),
+                pl: trim(row.m_pl),
+                fuelJetType: trim(row.m_fuel_jet_type),
+                drivenType: trim(row.m_driven_type)
               },
               is_transfer: row.v_is_transfer,
-              receipt_no: row.v_receipt_no,
+              receipt_no: trim(row.v_receipt_no),
               receipt_date: row.v_receipt_data,
               last_insurance_company: trim(row.v_last_insurance_company),
               insurance_due_date: row.v_insurance_due_date,
@@ -698,11 +724,11 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           for (let pid of vehicles[vid]["pids"]) {
             if (pid !== null) {
               for (let row of result.rows) {
-                if (pid = row.p_id) {
+                if (pid === row.p_id) {
                   vehicles[vid]["drivers"].push({
                     id: row.p_id,
                     name: trim(row.p_name),
-                    identity_no: trim(row.p_identity_no),
+                    identity_no: trim(row.p_identity),
                     phone: row.p_phone,
                     identity_front_view: trim(row.p_identity_front_view),
                     identity_rear_view: trim(row.p_identity_rear_view),
@@ -717,15 +743,17 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
         for (let vid of vids) {
           if (vehicles[vid]["owid"] !== null) {
             for (let row of result.rows) {
-              if (vehicles[vid]["owid"] = row.p_id) {
-                vehicles[vid]["owner"].id = row.p_id,
-                  vehicles[vid]["owner"].name = trim(row.p_name),
-                  vehicles[vid]["owner"].identity_no = trim(row.p_identity_no),
-                  vehicles[vid]["owner"].phone = row.p_phone,
-                  vehicles[vid]["owner"].identity_front_view = trim(row.p_identity_front_view),
-                  vehicles[vid]["owner"].identity_rear_view = trim(row.p_identity_rear_view),
-                  vehicles[vid]["owner"].license_frontal_view = trim(row.p_license_frontal_view),
-                  vehicles[vid]["owner"].license_rear_view = trim(row.p_license_rear_view)
+              if (vehicles[vid]["owid"] === row.p_id) {
+                 log.info(vehicles[vid]["owid"] + "---------" + row.p_id);
+                  vehicles[vid]["owner"].id = row.p_id;
+                  vehicles[vid]["owner"].name = trim(row.p_name);
+                  vehicles[vid]["owner"].identity_no = trim(row.p_identity);
+                  vehicles[vid]["owner"].phone = row.p_phone;
+                  vehicles[vid]["owner"].identity_front_view = trim(row.p_identity_front_view);
+                  vehicles[vid]["owner"].identity_rear_view = trim(row.p_identity_rear_view);
+                  vehicles[vid]["owner"].license_frontal_view = trim(row.p_license_frontal_view);
+                  vehicles[vid]["owner"].license_rear_view = trim(row.p_license_rear_view);
+                  break;
               }
             }
           }
@@ -735,7 +763,6 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           const vehicle = vehicles[vid];
           delete vehicle["pids"];
           delete vehicle["owid"];
-          log.info(JSON.stringify(vehicle) + "vehicle==========")
           multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
           multi.lpush("vehicle", vid);
           multi.hset("vehicle-vin-codes", vehicle["vehicle_model"]["vin_code"], JSON.stringify(vehicle["vehicle_model"]));
