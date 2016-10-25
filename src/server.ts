@@ -100,44 +100,40 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
 });
 
 // 获取车型和车的信息
-svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
-  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
-  log.info("getModelAndVehicle vid:" + vid + "uid is " + ctx.uid);
-  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err) {
-      rep({ code: 500, msg: err.message });
-    } else if (result) {
-      rep({ code: 200, data: JSON.parse(result) });
-    } else {
-      if (result !== null) {
-        let vehicle_code = JSON.parse(result).vehicle_code;
-        ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
-          if (err2) {
-            rep({ code: 500, msg: err2 });
-          } else if (result2) {
-            let vehicle = JSON.parse(result);
-            let v = {};
-            Object.assign(v, vehicle);
-            v["vehicle_model"] = JSON.parse(result2);
-            v["vehicle"] = vehicle;
-            rep({ code: 200, data: v });
-          } else {
-            rep({ code: 404, msg: "not found vehicle model" });
-          }
-        });
-      } else {
-        rep({ code: 404, msg: "Not found vehicle" });
-      }
-    }
-  });
-});
+// svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
+//   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+//     rep({
+//       code: 400,
+//       msg: errors.join("\n")
+//     });
+//   })) {
+//     return;
+//   }
+//   log.info("getModelAndVehicle vid:" + vid + "uid is " + ctx.uid);
+//   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
+//     if (err) {
+//       rep({ code: 500, msg: err.message });
+//     } else if (result) {
+//       let vehicle_code = JSON.parse(result).vehicle_code;
+//       ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
+//         if (err2) {
+//           rep({ code: 500, msg: err2 });
+//         } else if (result2) {
+//           let vehicle = JSON.parse(result);
+//           let v = {};
+//           Object.assign(v, vehicle);
+//           v["vehicle_model"] = JSON.parse(result2);
+//           v["vehicle"] = vehicle;
+//           rep({ code: 200, data: v });
+//         } else {
+//           rep({ code: 404, msg: "not found vehicle model" });
+//         }
+//       });
+//     } else {
+//       rep({ code: 404, msg: "Not found vehicle" });
+//     }
+//   });
+// });
 
 // 获取车型信息
 svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, vehicle_code: string) => {
@@ -467,7 +463,7 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
 // 获取用户车信息
 svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getUser_Vehicles uid is " + ctx.uid);
-  ctx.cache.lrange(vehicle_key, 0, -1, function (err, result) {
+  ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
     if (result) {
       let multi = ctx.cache.multi();
       for (let id of result) {
@@ -475,28 +471,7 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
       }
       multi.exec((err2, result2) => {
         if (result2) {
-          let vehicles = result2.map(e => JSON.parse(e));
-          let vehicles2 = [];
-          for (let vehicle of vehicles) {
-            if (vehicle.user_id === ctx.uid) {
-              multi.hget(entity_key, vehicle.vehicle_code);
-              vehicles2.push(vehicle);
-            }
-          }
-          multi.exec((err3, result3) => {
-            if (result3) {
-              let vehicle_models = result3.map(e => JSON.parse(e));
-              for (let i = 0; i < vehicles2.length; i++) {
-                vehicles2[i]["vehicle_model"] = vehicle_models[i];
-              }
-              rep({ code: 200, data: vehicles2 });
-            } else if (err3) {
-              log.info(err3);
-              rep({ code: 500, msg: err3 });
-            } else {
-              rep({ code: 404, msg: "vehicle models not found" });
-            }
-          });
+          rep({ code: 200, data: result2.map(e => JSON.parse(e))});
         } else if (err2) {
           log.info(err2);
           rep({ code: 500, msg: err2 });
