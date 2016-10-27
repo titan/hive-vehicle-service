@@ -248,9 +248,9 @@ svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: s
 });
 
 // 添加车信息上牌车
-svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string) => {
+svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string) => {
   log.info("setVehicleOnCard: " + ctx.uid);
-  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
+  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -263,7 +263,7 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
   let uid = ctx.uid;
   let args = [
     pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
-    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin
   ];
   log.info("setVehicleOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleOnCard", args: args }));
@@ -271,8 +271,8 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
 });
 
 // 添加车信息
-svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string) => {
-  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer)], (errors: string[]) => {
+svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin: string) => {
+  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -283,7 +283,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
   let pid = uuid.v1();
   let vid = uuid.v1();
   let uid = ctx.uid;
-  let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type];
+  let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin];
   log.info("setVehicle " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicle", args: args }));
   rep({ code: 200, data: vid });
@@ -324,91 +324,169 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
   })) {
     return;
   }
-  ctx.cache.hget(entity_key, vin, function (err, result) {
+  ctx.cache.hget("vehicle-vin-codes", vin, function (err, result) {
     if (err) {
       rep({
-        code: 404,
-        msg: "车型没找到"
+        code: 500,
+        msg: err
+      });
+    } else if (result) {
+      // log.info("result---------" + JSON.stringify(result));
+      let multi = ctx.cache.multi();
+      for (let code of JSON.parse(result)) {
+        multi.hget("vehicle-model-entities", code);
+      }
+      multi.exec((err2, result2) => {
+        if (err2) {
+          rep({
+            code: 500,
+            msg: err
+          });
+        } else if (result2){
+          rep({ code: 200, data: result2.map(e => JSON.parse(e)) });
+        } else {
+          getModel();
+        }
       });
     } else {
-      if (result === null) {
-        let data = JSON.stringify({
-          "channelType": "00",
-          "requestCode": "100103",
-          "operatorCode": "dev@fengchaohuzhu.com",
-          "data": {
-            "vinCode": vin
-          },
-          "dtype": "json",
-          "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
-        });
-        let options = {
-          // hostname:"www.baidu.coddm",
-          hostname: "www.jy-epc.com",
-          port: 80,
-          path: "/api-show/NqAfterMarketDataServlet",
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-json",
-            "Content-Length": data.length
-          }
-        };
-
-        let req = http.request(options, (res) => {
-          console.log(`STATUS: ${res.statusCode}`);
-          console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
-          res.setEncoding("utf8");
-          res.on("data", (chunk) => {
-            let arg = JSON.parse(chunk);
-            let args = arg.result;
-            if (args) {
-              ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-              rep({ code: 200, data: args.vehicleList });
-            } else {
-              rep({
-                code: 404,
-                msg: "车型没找到"
-              });
-            }
-          });
-          res.on("end", () => {
-          });
-        });
-        req.on("error", (e) => {
-          rep({
-            code: 404,
-            msg: "车型没找到"
-          });
-        });
-
-        req.write(data);
-        req.end();
-      } else {
-        ctx.cache.hget("vehicle-vin-codes", vin, (err, result) => {
-          if (result) {
-            let multi = ctx.cache.multi();
-            for (let code of JSON.parse(result)) {
-              multi.hget("vehicle-model-entities", code);
-            }
-            multi.exec((err, models) => {
-              if (models) {
-                rep({ code: 200, data: models.map(e => JSON.parse(e)) });
-              } else {
-                rep({
-                  code: 404,
-                  msg: "车型没找到"
-                });
-              }
-            });
+      getModel();
+    }
+    function getModel(){
+      let data = JSON.stringify({
+        "channelType": "00",
+        "requestCode": "100103",
+        "operatorCode": "dev@fengchaohuzhu.com",
+        "data": {
+          "vinCode": vin
+        },
+        "dtype": "json",
+        "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
+      });
+      let options = {
+        // hostname:"www.baidu.coddm",
+        hostname: "www.jy-epc.com",
+        port: 80,
+        path: "/api-show/NqAfterMarketDataServlet",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-json",
+          "Content-Length": data.length
+        }
+      };
+      let req = http.request(options, (res) => {
+        console.log(`STATUS: ${res.statusCode}`);
+        console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          let arg = JSON.parse(chunk);
+          let args = arg.result;
+          if (args) {
+            ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
+            rep({ code: 200, data: args.vehicleList });
           } else {
             rep({
               code: 404,
-              msg: "车型没找到"
+              msg: "b车型没找到"
             });
           }
         });
-      }
+        res.on("end", () => {
+        });
+      });
+      req.on("error", (e) => {
+        rep({
+          code: 404,
+          msg: "车型没找到"
+        });
+      });
+
+      req.write(data);
+      req.end();
     }
+    // if (err) {
+    //   rep({
+    //     code: 500,
+    //     msg: err
+    //   });
+    // } else {
+    //   if (result === null) {
+    //     let data = JSON.stringify({
+    //       "channelType": "00",
+    //       "requestCode": "100103",
+    //       "operatorCode": "dev@fengchaohuzhu.com",
+    //       "data": {
+    //         "vinCode": vin
+    //       },
+    //       "dtype": "json",
+    //       "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
+    //     });
+    //     let options = {
+    //       // hostname:"www.baidu.coddm",
+    //       hostname: "www.jy-epc.com",
+    //       port: 80,
+    //       path: "/api-show/NqAfterMarketDataServlet",
+    //       method: "POST",
+    //       headers: {
+    //         "Content-Type": "application/x-json",
+    //         "Content-Length": data.length
+    //       }
+    //     };
+
+    //     let req = http.request(options, (res) => {
+    //       console.log(`STATUS: ${res.statusCode}`);
+    //       console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
+    //       res.setEncoding("utf8");
+    //       res.on("data", (chunk) => {
+    //         let arg = JSON.parse(chunk);
+    //         let args = arg.result;
+    //         if (args) {
+    //           ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
+    //           rep({ code: 200, data: args.vehicleList });
+    //         } else {
+    //           rep({
+    //             code: 404,
+    //             msg: "b车型没找到"
+    //           });
+    //         }
+    //       });
+    //       res.on("end", () => {
+    //       });
+    //     });
+    //     req.on("error", (e) => {
+    //       rep({
+    //         code: 404,
+    //         msg: "c车型没找到"
+    //       });
+    //     });
+
+    //     req.write(data);
+    //     req.end();
+    //   } else {
+    //     ctx.cache.hget("vehicle-vin-codes", vin, (err, result) => {
+    //       if (result) {
+    //         let multi = ctx.cache.multi();
+    //         for (let code of JSON.parse(result)) {
+    //           multi.hget("vehicle-model-entities", code);
+    //         }
+    //         multi.exec((err, models) => {
+    //           if (models) {
+    //             rep({ code: 200, data: models.map(e => JSON.parse(e)) });
+    //           } else {
+    //             rep({
+    //               code: 404,
+    //               msg: "d车型没找到"
+    //             });
+    //           }
+    //         });
+    //       } else {
+    //         rep({
+    //           code: 404,
+    //           msg: "e车型没找到"
+    //         });
+    //       }
+    //     });
+    //   }
+    // }
   });
 });
 
@@ -471,7 +549,7 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
       }
       multi.exec((err2, result2) => {
         if (result2) {
-          rep({ code: 200, data: result2.map(e => JSON.parse(e))});
+          rep({ code: 200, data: result2.map(e => JSON.parse(e)) });
         } else if (err2) {
           log.info(err2);
           rep({ code: 500, msg: err2 });
