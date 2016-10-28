@@ -6,7 +6,7 @@ import * as http from "http";
 import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
 import { servermap, triggermap } from "hive-hostmap";
-import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier } from "hive-verify";
+import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier } from "hive-verify";
 
 let log = bunyan.createLogger({
   name: "vehicle-server",
@@ -57,7 +57,7 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
   ctx.cache.hget("order-entities", order_id, function (err, result) {
     if (result) {
       log.info("result===================" + result);
-      let vid = JSON.parse(result).vehicle.vehicle.id;
+      let vid = JSON.parse(result).vehicle.id;
       ctx.cache.hget(vehicle_entities, vid, function (err2, result2) {
         if (err2) {
           rep({ code: 500, msg: err2 });
@@ -386,7 +386,7 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
           } else {
             rep({
               code: 404,
-              msg: "b车型没找到"
+              msg: "该车型没找到,请检查VIN码输入是否正确"
             });
           }
         });
@@ -587,59 +587,22 @@ svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
   });
 });
 
-// 修改驾驶人信息
-// svr.call("changeDriverInfo", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string, name: string, identity_no: string, phone: string) => {
+// 提交出险次数 damageCount
 
-//   let args = { vid, pid, name, identity_no, phone };
-//   log.info("changeDriverInfo" + JSON.stringify(args) + "uid is " + ctx.uid);
-//   ctx.msgqueue.send(msgpack.encode({ cmd: "changeDriverInfo", args: args }));
-//   rep({ status: "okay" });
-// });
-// 添加企业车主上牌
-// svr.call("setVehicleInfoOnCardEnterprise", permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: string, fuel_type: string) => {
-//   if (ctx.uid === null || name === null || society_code === null || contact_phone === null || contact_name === null || vehicle_code === null || license_no === null || engine_no === null || average_mileage === null || is_transfer === null) {
-//     rep({ "status": "有空值" })
-//   } else {
-//     if (register_date === "") {
-//       register_date = null;
-//     }
-//     if (insurance_due_date === "") {
-//       insurance_due_date = null;
-//     }
-//     let pid = uuid.v1();
-//     let vid = uuid.v1();
-//     let uid = ctx.uid;
-//     let args = {
-//       pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid, license_no, engine_no,
-//       register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type
-//     };
-//     log.info("setVehicleInfoOnCardEnterprise " + JSON.stringify(args) + "uid is " + ctx.uid);
-//     ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoOnCardEnterprise", args: args }));
-//     rep(vid);
-//   }
-// });
-
-// 添加企业车主未上牌
-// svr.call("setVehicleInfoEnterprise", permissions, (ctx: Context, rep: ResponseFunction, name: string, society_code: string, contact_name: string, contact_phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string) => {
-//   if (ctx.uid === null || name === null || society_code === null || contact_phone === null || contact_name === null || vehicle_code === null || engine_no === null || average_mileage === null || is_transfer === null) {
-//     rep({ "status": "有空值" })
-//   } else {
-//     if (receipt_date === "") {
-//       receipt_date = null;
-//     }
-//     let pid = uuid.v1();
-//     let vid = uuid.v1();
-//     let uid = ctx.uid;
-//     let args = {
-//       pid, name, society_code, contact_name, contact_phone, uid, recommend, vehicle_code, vid, engine_no, average_mileage, is_transfer,
-//       receipt_no, receipt_date, last_insurance_company, fuel_type
-//     };
-//     log.info("setVehicleInfoEnterprise" + JSON.stringify(args) + "uid is " + ctx.uid);
-//     ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleInfoEnterprise", args: args }));
-
-//     rep(vid);
-//   }
-// });
+svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: string, count: number) => {
+  log.info("damageCount " + vid + " count " + count);
+  if (!verify([uuidVerifier("vid", vid), numberVerifier("count", count)], (errors: string[]) => {
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+  let callback = uuid.v1();
+  ctx.msgqueue.send(msgpack.encode({ cmd: "damageCount", args: [vid, count, callback] }));
+  wait_for_response(ctx.cache, callback, rep);
+});
 
 log.info("Start server at %s and connect to %s", config.svraddr, config.msgaddr);
 

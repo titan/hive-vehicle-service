@@ -39,6 +39,8 @@ let config: Config = {
 };
 
 let processor = new Processor(config);
+let vehicle_trigger = nanomsg.socket("pub");
+vehicle_trigger.bind(triggermap.vehicle);
 
 // 新车已上牌个人
 processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
@@ -650,6 +652,78 @@ function trim(str: string) {
   }
 }
 
+// 出险次数
+processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
+  log.info("damageCount ");
+  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicle SET accident_times = $1 WHERE id = $2 and deleted = false", [count ,vid], (vehicle) => {
+    vehicle["accident_times"] = count;
+    return vehicle;
+  });
+});
+function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, cbflag: string, sql: string, args: any[], cb: ((vehicle: Object) => Object)): void {
+  new Promise<void>((resolve, reject) => {
+    db.query(sql, args, (err: Error) => {
+      if (err) {
+        log.info(err);
+        reject(err);
+      } else {
+        resolve(null);
+      }
+    });
+  })
+    .then(() => {
+      return new Promise<Object>((resolve, reject) => {
+        log.info("redis " + vid);
+        cache.hget("vehicle-entities", vid, function (err, result) {
+          if (result) {
+            resolve(JSON.parse(result));
+          } else if (err) {
+            log.info(err);
+            reject(err);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+    })
+    .then((vehicle: Object) => {
+      if (vehicle != null) {
+        let uw = cb(vehicle);
+        let multi = cache.multi();
+        multi.hset("vehicle-entities", vid, JSON.stringify(uw));
+        multi.setex(cbflag, 30, JSON.stringify({
+          code: 200,
+          data:{ vid: vid, accident_times: vehicle["accident_times"]}
+        }));
+        multi.exec((err: Error, _) => {
+          if (err) {
+            log.error(err, "update vehicle cache error");
+            cache.setex(cbflag, 30, JSON.stringify({
+              code: 500,
+              msg: "update vehicle cache error"
+            }));
+          }
+          vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
+          done();
+        });
+      } else {
+        cache.setex(cbflag, 30, JSON.stringify({
+          code: 404,
+          msg: "Not found vehicle"
+        }));
+        log.info("Not found vehicle");
+        done();
+      }
+    })
+    .catch(error => {
+      cache.setex(cbflag, 30, JSON.stringify({
+        code: 500,
+        msg: error.message
+      }));
+      log.info("err" + error);
+      done();
+    });
+}
 log.info("Start processor at %s", config.addr);
 
 processor.run();
