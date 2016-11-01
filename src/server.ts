@@ -250,7 +250,7 @@ svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: s
 // 添加车信息上牌车
 svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string) => {
   log.info("setVehicleOnCard: " + ctx.uid);
-  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
+  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -272,7 +272,7 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
 
 // 添加车信息
 svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin: string) => {
-  if (!verify([stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
+  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -591,7 +591,8 @@ svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
 
 svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: string, count: number) => {
   log.info("damageCount " + vid + " count " + count);
-  if (!verify([uuidVerifier("vid", vid), numberVerifier("count", count)], (errors: string[]) => {
+  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+    log.info(errors);
     rep({
       code: 400,
       msg: errors.join("\n")

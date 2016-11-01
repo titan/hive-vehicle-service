@@ -655,7 +655,7 @@ function trim(str: string) {
 // 出险次数
 processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
   log.info("damageCount ");
-  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicle SET accident_times = $1 WHERE id = $2 and deleted = false", [count ,vid], (vehicle) => {
+  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count ,vid], (vehicle) => {
     vehicle["accident_times"] = count;
     return vehicle;
   });
@@ -702,6 +702,8 @@ function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid
               code: 500,
               msg: "update vehicle cache error"
             }));
+          } else {
+            log.info("success");
           }
           vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
           done();
