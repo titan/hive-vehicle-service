@@ -47,6 +47,7 @@ let permissions: Permission[] = [["mobile", true], ["admin", true]];
 svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, order_id: string) => {
   log.info("uploadStatus orderid:" + order_id + "uid is " + ctx.uid);
   if (!verify([uuidVerifier("order_id", order_id)], (errors: string[]) => {
+    log.info("order_id is not uuid");
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -56,35 +57,44 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
   }
   ctx.cache.hget("order-entities", order_id, function (err, result) {
     if (result) {
-      log.info("result===================" + result);
+      // log.info("result===================" + result);
       let vid = JSON.parse(result).vehicle.id;
       ctx.cache.hget(vehicle_entities, vid, function (err2, result2) {
         if (err2) {
           rep({ code: 500, msg: err2 });
         } else {
-          log.info("result2------------------" + JSON.parse(result2));
+          // log.info("result2------------------" + JSON.parse(result2));
           if (result2 !== null) {
             let vehicle = JSON.parse(result2);
-            let driving_frontal_view = vehicle.driving_frontal_view;
-            let driving_rear_view = vehicle.driving_rear_view;
-            let identity_frontal_view = vehicle.owner.identity_frontal_view;
-            let identity_rear_view = vehicle.owner.identity_rear_view;
-            let drivers = vehicle.drivers;
-            let sum = 4 + drivers.length;
+            let drivers = vehicle["drivers"];
+            let sum = 5 + drivers.length;
             let vnum = 0;
+            if (vehicle["driving_frontal_view"]) {
+              vnum += 1;
+            }
+            if (vehicle["driving_rear_view"]) {
+              vnum += 1;
+            }
+            if (vehicle["owner"]["identity_frontal_view"]) {
+              vnum += 1;
+            }
+            if (vehicle["owner"]["identity_rear_view"]) {
+              vnum += 1;
+            }
+            if (vehicle["owner"]["license_view"]) {
+              vnum += 1;
+            }
             for (let driver of drivers) {
-              if (driver.license_frontal_view !== null && driver.license_frontal_view !== undefined) {
+              if (driver.license_view) {
                 vnum++;
               }
             }
             if (vnum === 0) {
-              rep({ certificate_state: 0, meaning: "未完整上传" });
+              rep({ certificate_state: 0, meaning: "未上传证件" });
             } else if (vnum < sum) {
               rep({ certificate_state: 1, meaning: "上传部分证件" });
             } else if (vnum === sum) {
               rep({ certificate_state: 2, meaning: "已全部上传" });
-            } else {
-              rep({ code: 404, msg: "Not Found image" });
             }
           } else {
             rep({ code: 404, msg: "Not Found Vehicle" });
@@ -342,7 +352,7 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
             code: 500,
             msg: err
           });
-        } else if (result2){
+        } else if (result2) {
           rep({ code: 200, data: result2.map(e => JSON.parse(e)) });
         } else {
           getModel();
@@ -351,7 +361,7 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
     } else {
       getModel();
     }
-    function getModel(){
+    function getModel() {
       let data = JSON.stringify({
         "channelType": "00",
         "requestCode": "100103",
