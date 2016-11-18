@@ -301,7 +301,8 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
 
 // 添加驾驶员信息
 svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
-  if (!verify([uuidVerifier("vid", vid), arrayVerifier("drivers", drivers)], (errors: string[]) => {
+  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
+    log.info(errors);
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -318,7 +319,7 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
     dids.push(did);
   }
   let args = [pids, dids, vid, drivers];
-  log.info("setDriver" + args + "uid is " + ctx.uid);
+  log.info("setDriver " + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
   rep({ code: 200, data: pids });
 });
