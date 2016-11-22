@@ -313,8 +313,8 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
   let pids = [];
   let dids = [];
   for (let d of drivers) {
-    let pid = uuid.v1();
-    let did = uuid.v1();
+    let pid = uuid.v4();
+    let did = uuid.v4();
     pids.push(pid);
     dids.push(did);
   }
@@ -553,7 +553,7 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
 svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("getUser_Vehicles uid is " + ctx.uid);
   ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
-    if (result) {
+    if (result !== null && result != '' && result != undefined) {
       let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
