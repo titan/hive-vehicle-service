@@ -1,6 +1,6 @@
 import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
 import { Client as PGClient, ResultSet } from "pg";
-import { createClient, RedisClient} from "redis";
+import { createClient, RedisClient } from "redis";
 import * as bunyan from "bunyan";
 import { servermap, triggermap } from "hive-hostmap";
 import * as uuid from "node-uuid";
@@ -347,8 +347,9 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
         cache.setex(callback, 30, JSON.stringify({
           code: 500,
           msg: err.message
-        }));
-        done();
+        }), (err, result) => {
+          done();
+        });
       } else if (vehiclejson) {
         const vehicle = JSON.parse(vehiclejson);
         vehicle["driving_frontal_view"] = driving_frontal_view;
@@ -368,21 +369,25 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
             cache.setex(callback, 30, JSON.stringify({
               code: 500,
               msg: err1.message
-            }));
+            }), (err, result) => {
+              done();
+            });
           } else {
             cache.setex(callback, 30, JSON.stringify({
               code: 200,
               msg: "Success"
-            }));
+            }), (err, result) => {
+              done();
+            });
           }
-          done();
         });
       } else {
         cache.setex(callback, 30, JSON.stringify({
           code: 404,
           msg: "Vehicle not found"
-        }));
-        done();
+        }), (err, result) => {
+          done();
+        });
       }
     });
   }, (e: Error) => {
@@ -394,8 +399,9 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
       cache.setex(callback, 30, JSON.stringify({
         code: 500,
         msg: e.message
-      }));
-      done();
+      }), (err, result) => {
+        done();
+      });
     });
   });
 });
@@ -427,7 +433,7 @@ function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
     });
   } else {
     let model = models.shift();
-    ctx.db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_number, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17, $18)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineNumber"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]], (err: Error) => {
+    ctx.db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]], (err: Error) => {
       if (err) {
         log.error(err, "query error");
       }
@@ -456,7 +462,6 @@ function row2model(row: Object) {
     brandName: row["brand_name"] ? row["brand_name"].trim() : "",
     familyName: row["family_name"] ? row["family_name"].trim() : "",
     bodyType: row["body_type"] ? row["body_type"].trim() : "",
-    engineNumber: row["engineNumber"] ? row["engineNumber"].trim() : "",
     engineDesc: row["engine_desc"] ? row["engine_desc"].trim() : "",
     gearboxName: row["gearbox_name"] ? row["gearbox_name"].trim() : "",
     yearPattern: row["yearPattern"] ? row["yearPattern"].trim() : "",
@@ -503,7 +508,7 @@ function row2vehicle(row: Object) {
 function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
   log.info("refresh_vehicle");
   return new Promise<void>((resolve, reject) => {
-    db.query("SELECT v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_register_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_rear_view AS v_driving_rear_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, d.pid AS d_pid , m.vehicle_code AS m_vehicle_code, v.vin AS m_vin_code, m.vehicle_name AS m_vehicle_name, m.brand_name AS m_brand_name, m.family_name AS m_family_name, m.body_type AS m_body_type, m.engine_number AS m_engine_number, m.engine_desc AS m_engine_desc, m.gearbox_name AS m_gearbox_name, m.year_pattern AS m_year_pattern, m.group_name AS m_group_name, m.cfg_level AS m_cfg_level, m.purchase_price AS m_purchase_price, m.purchase_price_tax AS m_purchase_price_tax, m.seat AS m_seat, m.effluent_standard AS m_effluent_standard, m.pl AS m_pl, m.fuel_jet_type AS m_fuel_jet_type, m.driven_type AS m_driven_type,p.id AS p_id, p.name AS p_name, p.identity_no AS p_identity, p.phone AS p_phone, p.identity_frontal_view AS p_identity_frontal_view, p.identity_rear_view AS p_identity_rear_view, p.license_frontal_view AS p_license_frontal_view, p.license_rear_view AS p_license_rear_view FROM vehicles AS v LEFT JOIN drivers AS d ON v.id = d.vid LEFT JOIN vehicle_model AS m ON v.vehicle_code = m.vehicle_code LEFT JOIN person AS p ON d.pid = p.id or v.owner = p.id", [], (e: Error, result: ResultSet) => {
+    db.query("SELECT v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_register_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_rear_view AS v_driving_rear_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, d.pid AS d_pid , m.vehicle_code AS m_vehicle_code, v.vin AS m_vin_code, m.vehicle_name AS m_vehicle_name, m.brand_name AS m_brand_name, m.family_name AS m_family_name, m.body_type AS m_body_type,  m.engine_desc AS m_engine_desc, m.gearbox_name AS m_gearbox_name, m.year_pattern AS m_year_pattern, m.group_name AS m_group_name, m.cfg_level AS m_cfg_level, m.purchase_price AS m_purchase_price, m.purchase_price_tax AS m_purchase_price_tax, m.seat AS m_seat, m.effluent_standard AS m_effluent_standard, m.pl AS m_pl, m.fuel_jet_type AS m_fuel_jet_type, m.driven_type AS m_driven_type,p.id AS p_id, p.name AS p_name, p.identity_no AS p_identity, p.phone AS p_phone, p.identity_frontal_view AS p_identity_frontal_view, p.identity_rear_view AS p_identity_rear_view, p.license_frontal_view AS p_license_frontal_view, p.license_rear_view AS p_license_rear_view FROM vehicles AS v LEFT JOIN drivers AS d ON v.id = d.vid LEFT JOIN vehicle_model AS m ON v.vehicle_code = m.vehicle_code LEFT JOIN person AS p ON d.pid = p.id or v.owner = p.id", [], (e: Error, result: ResultSet) => {
       if (e) {
         reject(e);
         log.info("err : SELECT query error" + e);
@@ -514,13 +519,10 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
             vehicles[row.v_id]["pids"].push(row.d_pid);
           } else {
             let r_date: string;
-            // log.info(row.v_register_date + "-------------");
             if (row.v_register_date) {
               let register = new Date(row.v_register_date);
               r_date = register.getFullYear() + "-" + (register.getMonth() + 1) + "-" + register.getDate();
-              // log.info(r_date + "=====================");
             }
-            // log.info(r_date+"0000000000000000");
             const vehicle = {
               id: row.v_id,
               user_id: row.v_user_id,
@@ -542,7 +544,6 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
                 brandName: trim(row.m_brand_name),
                 familyName: trim(row.m_family_name),
                 bodyType: trim(row.m_body_type),
-                engineNumber: trim(row.m_engine_number),
                 engineDesc: trim(row.m_engine_desc),
                 gearboxName: trim(row.m_gearbox_name),
                 yearPattern: trim(row.m_year_pattern),
@@ -655,7 +656,7 @@ function trim(str: string) {
 // 出险次数
 processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
   log.info("damageCount ");
-  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count ,vid], (vehicle) => {
+  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid], (vehicle) => {
     vehicle["accident_times"] = count;
     return vehicle;
   });
@@ -693,7 +694,7 @@ function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid
         multi.hset("vehicle-entities", vid, JSON.stringify(uw));
         multi.setex(cbflag, 30, JSON.stringify({
           code: 200,
-          data:{ vid: vid, accident_times: vehicle["accident_times"]}
+          data: { vid: vid, accident_times: vehicle["accident_times"] }
         }));
         multi.exec((err: Error, _) => {
           if (err) {
@@ -721,9 +722,10 @@ function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid
       cache.setex(cbflag, 30, JSON.stringify({
         code: 500,
         msg: error.message
-      }));
+      }), (err, result) => {
+        done();
+      });
       log.info("err" + error);
-      done();
     });
 }
 log.info("Start processor at %s", config.addr);
