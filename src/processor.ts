@@ -1,6 +1,6 @@
 import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
 import { Client as PGClient, ResultSet } from "pg";
-import { createClient, RedisClient} from "redis";
+import { createClient, RedisClient } from "redis";
 import * as bunyan from "bunyan";
 import { servermap, triggermap } from "hive-hostmap";
 import * as uuid from "node-uuid";
@@ -347,8 +347,9 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
         cache.setex(callback, 30, JSON.stringify({
           code: 500,
           msg: err.message
-        }));
-        done();
+        }), (err, result) => {
+          done();
+        });
       } else if (vehiclejson) {
         const vehicle = JSON.parse(vehiclejson);
         vehicle["driving_frontal_view"] = driving_frontal_view;
@@ -368,21 +369,25 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
             cache.setex(callback, 30, JSON.stringify({
               code: 500,
               msg: err1.message
-            }));
+            }), (err, result) => {
+              done();
+            });
           } else {
             cache.setex(callback, 30, JSON.stringify({
               code: 200,
               msg: "Success"
-            }));
+            }), (err, result) => {
+              done();
+            });
           }
-          done();
         });
       } else {
         cache.setex(callback, 30, JSON.stringify({
           code: 404,
           msg: "Vehicle not found"
-        }));
-        done();
+        }), (err, result) => {
+          done();
+        });
       }
     });
   }, (e: Error) => {
@@ -394,8 +399,9 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
       cache.setex(callback, 30, JSON.stringify({
         code: 500,
         msg: e.message
-      }));
-      done();
+      }), (err, result) => {
+        done();
+      });
     });
   });
 });
@@ -513,13 +519,10 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
             vehicles[row.v_id]["pids"].push(row.d_pid);
           } else {
             let r_date: string;
-            // log.info(row.v_register_date + "-------------");
             if (row.v_register_date) {
               let register = new Date(row.v_register_date);
               r_date = register.getFullYear() + "-" + (register.getMonth() + 1) + "-" + register.getDate();
-              // log.info(r_date + "=====================");
             }
-            // log.info(r_date+"0000000000000000");
             const vehicle = {
               id: row.v_id,
               user_id: row.v_user_id,
@@ -653,7 +656,7 @@ function trim(str: string) {
 // 出险次数
 processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
   log.info("damageCount ");
-  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count ,vid], (vehicle) => {
+  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid], (vehicle) => {
     vehicle["accident_times"] = count;
     return vehicle;
   });
@@ -691,7 +694,7 @@ function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid
         multi.hset("vehicle-entities", vid, JSON.stringify(uw));
         multi.setex(cbflag, 30, JSON.stringify({
           code: 200,
-          data:{ vid: vid, accident_times: vehicle["accident_times"]}
+          data: { vid: vid, accident_times: vehicle["accident_times"] }
         }));
         multi.exec((err: Error, _) => {
           if (err) {
@@ -719,9 +722,10 @@ function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid
       cache.setex(cbflag, 30, JSON.stringify({
         code: 500,
         msg: error.message
-      }));
+      }), (err, result) => {
+        done();
+      });
       log.info("err" + error);
-      done();
     });
 }
 log.info("Start processor at %s", config.addr);

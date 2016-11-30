@@ -278,13 +278,14 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
     pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, ulicense_no, uengine_no,
     register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin
   ];
-  log.info("setVehicleOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
+  // log.info("setVehicleOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleOnCard", args: args }));
   rep({ code: 200, data: vid });
 });
 
 // 添加车信息
 svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
+  log.info("setVehicle: " + ctx.uid);
   if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)], (errors: string[]) => {
     rep({
       code: 400,
@@ -300,7 +301,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
   let uengine_no = engine_no.toUpperCase();
   let ureceipt_no = receipt_no.toUpperCase();
   let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin];
-  log.info("setVehicle " + JSON.stringify(args) + "uid is " + ctx.uid);
+  // log.info("setVehicle " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicle", args: args }));
   rep({ code: 200, data: vid });
 });
