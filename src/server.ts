@@ -308,14 +308,16 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
 
 // 添加驾驶员信息
 svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
-  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+  for (let driver of drivers) {
+    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), stringVerifier("phone", driver["phone"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
+      log.info(errors);
+      rep({
+        code: 400,
+        msg: errors.join("\n")
+      });
+    })) {
+      return;
+    }
   }
   let pids = [];
   let dids = [];

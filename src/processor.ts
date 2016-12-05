@@ -219,7 +219,7 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
     let person = persons.shift();
     ctx.db.query("BEGIN", [], (err: Error) => {
       let pid = ctx.pids.shift();
-      ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity"], person["phone"]], (err: Error) => {
+      ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
         if (err) {
           log.error(err, "query error");
           ctx.db.query("ROLLBACK", [], (err: Error) => {
@@ -245,7 +245,7 @@ function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
                       vehicle["drivers"].push({
                         id: pid,
                         name: person["name"],
-                        identity_no: person["identity"],
+                        identity_no: person["identity_no"],
                         phone: person["phone"],
                         is_primary: person["is_primary"]
                       });
