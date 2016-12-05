@@ -398,7 +398,7 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
         console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
-          let arg = JSON.parse(chunk);
+          let arg = JSON.parse(chunk.toString());
           let args = arg.result;
           if (args) {
             ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
