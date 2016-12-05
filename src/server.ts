@@ -625,6 +625,82 @@ svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: 
   wait_for_response(ctx.cache, callback, rep);
 });
 
+svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string) => {
+  log.info("licenseNumber " + licenseNumber);
+  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+
+  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+  let data: Object = {
+    "operType": "BDB",
+    "msg": "",
+    "sendTime": sendTimeString,
+    "sign": "",
+    "data": {
+      "licenseNo": licenseNumber,
+      "applicationID": "FENGCHAOHUZHU_SERVICE"
+    }
+  };
+
+  let postData: string = JSON.stringify(data);
+  let options = {
+    hostname: "139.198.1.73",
+    port: 8081,
+    method: "POST",
+    path: "/zkyq-web/prerelease/ifmEntry",
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  let req = http.request(options, function (res) {
+    log.info("Status: " + res.statusCode);
+    res.setEncoding("utf8");
+
+    let result: string = "";
+
+    res.on("data", function (body) {
+      result += body;
+    });
+
+    res.on("end", function () {
+      log.info(result);
+      let retData: Object = JSON.parse(result);
+      if (retData["data"]["frameNo"] !== undefined && retData["data"]["frameNo"] !== null && retData["data"]["frameNo"] !== "") {
+        rep({
+          code: 200,
+          data: retData["data"]["frameNo"]
+        });
+      } else {
+        rep({
+          code: 400,
+          msg: "Not Found!"
+        });
+      }
+    });
+
+
+    req.on('error', (e) => {
+      log.info(`problem with request: ${e.message}`);
+      rep({
+        code: 500,
+        msg: e.message
+      });
+    });
+  });
+
+  req.end(postData);
+});
+
 log.info("Start server at %s and connect to %s", config.svraddr, config.msgaddr);
 
 svr.run();
