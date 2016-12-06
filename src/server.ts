@@ -673,10 +673,88 @@ svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFun
     res.on("end", function () {
       log.info(result);
       let retData: Object = JSON.parse(result);
-      if (retData["data"]["frameNo"] !== undefined && retData["data"]["frameNo"] !== null && retData["data"]["frameNo"] !== "") {
+      if (retData["msg"] === "success") {
         rep({
           code: 200,
-          data: retData["data"]["frameNo"]
+          data: retData["data"]
+        });
+      } else {
+        rep({
+          code: 400,
+          msg: "Not Found!"
+        });
+      }
+    });
+
+    req.on('error', (e) => {
+      log.info(`problem with request: ${e.message}`);
+      rep({
+        code: 500,
+        msg: e.message
+      });
+    });
+  });
+
+  req.end(postData);
+});
+
+svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string, responseNumber) => {
+  log.info("licenseNumber " + licenseNumber);
+  if (!verify([stringVerifier("licenseNumber", licenseNumber), stringVerifier("responseNumber", responseNumber)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+
+  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+  let data: Object = {
+    "operType": "JYK",
+    "msg": "",
+    "sendTime": sendTimeString,
+    "sign": "",
+    "data": {
+      "applicationID": "FENGCHAOHUZHU_SERVICE",
+      "responseNo": responseNumber,
+      "frameNo": "",
+      "licenseNo": licenseNumber
+    }
+  };
+
+  let postData: string = JSON.stringify(data);
+
+  let options = {
+    hostname: "139.198.1.73",
+    port: 8081,
+    method: "POST",
+    path: "/zkyq-web/prerelease/ifmEntry",
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  let req = http.request(options, function (res) {
+    log.info("Status: " + res.statusCode);
+    res.setEncoding("utf8");
+
+    let result: string = "";
+
+    res.on("data", function (body) {
+      result += body;
+    });
+
+    res.on("end", function () {
+      log.info(result);
+      let retData: Object = JSON.parse(result);
+      if (retData["msg"] === "success") {
+        rep({
+          code: 200,
+          data: retData["data"]
         });
       } else {
         rep({
