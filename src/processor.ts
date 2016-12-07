@@ -62,15 +62,28 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
   (async () => {
     try {
       let pid = "";
+      let owner = {};
       await db.query("BEGIN");
-      const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
       log.info("old person: " + JSON.stringify(person.rows));
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
+        owner = {
+          id: pid,
+          name: person.rows[0]["name"],
+          identity_no: person.rows[0]["identity_no"],
+          phone: person.rows[0]["phone"]
+        };
       } else {
         pid = uuid.v1();
         log.info("new perosn" + pid);
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
+        owner = {
+          id: pid,
+          name: name,
+          identity_no: identity_no,
+          phone: phone
+        };
       }
       let vids = await db.query("SELECT id FROM vehicles WHERE vin = $1", [vin]);
       let vid = "";
@@ -84,12 +97,7 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
         let vehicle = {
           id: vid,
           user_id: uid,
-          owner: {
-            id: pid,
-            name: name,
-            identity_no: identity_no,
-            phone: phone
-          },
+          owner: owner,
           owner_type: 0,
           recommend: recommend,
           drivers: [],
@@ -130,13 +138,26 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
   (async () => {
     try {
       let pid = "";
+      let owner = {};
       await db.query("BEGIN");
       const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
       log.info("old person: " + JSON.stringify(person.rows));
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
+        owner = {
+          id: pid,
+          name: person.rows[0]["name"],
+          identity_no: person.rows[0]["identity_no"],
+          phone: person.rows[0]["phone"]
+        };
       } else {
         pid = uuid.v1();
+        owner = {
+          id: pid,
+          name: name,
+          identity_no: identity_no,
+          phone: phone
+        };
         log.info("new perosn" + pid);
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
@@ -152,12 +173,7 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
         let vehicle = {
           id: vid,
           user_id: uid,
-          owner: {
-            id: pid,
-            name: name,
-            identity_no: identity_no,
-            phone: phone
-          },
+          owner: owner,
           owner_type: 0,
           recommend: recommend,
           drivers: [],
@@ -581,7 +597,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
                     id: row.p_id,
                     name: trim(row.p_name),
                     identity_no: trim(row.p_identity),
-                    phone: row.p_phone,
+                    phone: trim(row.phone),
                     identity_front_view: trim(row.p_identity_front_view),
                     identity_rear_view: trim(row.p_identity_rear_view),
                     license_frontal_view: trim(row.p_license_frontal_view),
@@ -621,8 +637,8 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           multi.hset("vehicle-model-entities", vehicle["vehicle_model"]["vin_code"], JSON.stringify(vehicle["vehicle_model"]));
           multi.sadd("vehicle-model", vehicle["vehicle_model"]["vin_code"]);
         }
-        for(const key of Object.keys(vehicle_users)) {
-           multi.lpush("vehicle-" + key, vehicle_users[key]);
+        for (const key of Object.keys(vehicle_users)) {
+          multi.lpush("vehicle-" + key, vehicle_users[key]);
         }
         multi.exec((err: Error, _: any[]) => {
           if (err) {

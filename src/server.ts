@@ -523,9 +523,9 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
 
 // 获取用户车信息
 svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info("getUser_Vehicles uid is " + ctx.uid);
+  log.info("getUserVehicles uid is " + ctx.uid);
   ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
-    if (result !== null && result != '' && result != undefined) {
+    if (result !== null && result != "" && result != undefined) {
       let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
