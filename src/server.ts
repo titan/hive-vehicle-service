@@ -109,41 +109,6 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
   });
 });
 
-// 获取车型和车的信息
-// svr.call("getModelAndVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: string) => {
-//   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-//     rep({
-//       code: 400,
-//       msg: errors.join("\n")
-//     });
-//   })) {
-//     return;
-//   }
-//   log.info("getModelAndVehicle vid:" + vid + "uid is " + ctx.uid);
-//   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-//     if (err) {
-//       rep({ code: 500, msg: err.message });
-//     } else if (result) {
-//       let vehicle_code = JSON.parse(result).vehicle_code;
-//       ctx.cache.hget(entity_key, vehicle_code, function (err2, result2) {
-//         if (err2) {
-//           rep({ code: 500, msg: err2 });
-//         } else if (result2) {
-//           let vehicle = JSON.parse(result);
-//           let v = {};
-//           Object.assign(v, vehicle);
-//           v["vehicle_model"] = JSON.parse(result2);
-//           v["vehicle"] = vehicle;
-//           rep({ code: 200, data: v });
-//         } else {
-//           rep({ code: 404, msg: "not found vehicle model" });
-//         }
-//       });
-//     } else {
-//       rep({ code: 404, msg: "Not found vehicle" });
-//     }
-//   });
-// });
 
 // 获取车型信息
 svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, vehicle_code: string) => {
@@ -261,6 +226,7 @@ svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: s
 svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin_code: string) => {
   log.info("setVehicleOnCard: " + ctx.uid);
   if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)], (errors: string[]) => {
+    log.info(errors);
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -268,25 +234,24 @@ svr.call("setVehicleOnCard", permissions, (ctx: Context, rep: ResponseFunction, 
   })) {
     return;
   }
-  let pid = uuid.v1();
-  let vid = uuid.v1();
   let uid = ctx.uid;
+  let callback = uuid.v1();
   let vin = vin_code.toUpperCase();
   let uengine_no = engine_no.toUpperCase();
   let ulicense_no = license_no.toUpperCase();
   let args = [
-    pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, ulicense_no, uengine_no,
-    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin
+    name, identity_no, phone, uid, recommend, vehicle_code, ulicense_no, uengine_no,
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, callback
   ];
-  // log.info("setVehicleOnCard " + JSON.stringify(args) + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicleOnCard", args: args }));
-  rep({ code: 200, data: vid });
+  wait_for_response(ctx.cache, callback, rep);
 });
 
 // 添加车信息
-svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
+svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
   log.info("setVehicle: " + ctx.uid);
   if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)], (errors: string[]) => {
+    log.info(errors);
     rep({
       code: 400,
       msg: errors.join("\n")
@@ -294,16 +259,14 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
   })) {
     return;
   }
-  let pid = uuid.v1();
-  let vid = uuid.v1();
-  let uid = ctx.uid;
   let vin = vin_code.toUpperCase();
+  let uid = ctx.uid;
+  let callback = uuid.v1();
   let uengine_no = engine_no.toUpperCase();
   let ureceipt_no = receipt_no.toUpperCase();
-  let args = [pid, name, identity_no, phone, uid, recommend, vehicle_code, vid, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin];
-  // log.info("setVehicle " + JSON.stringify(args) + "uid is " + ctx.uid);
+  let args = [name, identity_no, phone, uid, recommend, vehicle_code, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin, callback];
   ctx.msgqueue.send(msgpack.encode({ cmd: "setVehicle", args: args }));
-  rep({ code: 200, data: vid });
+  wait_for_response(ctx.cache, callback, rep);
 });
 
 // 添加驾驶员信息
@@ -560,9 +523,9 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
 
 // 获取用户车信息
 svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) => {
-  log.info("getUser_Vehicles uid is " + ctx.uid);
+  log.info("getUserVehicles uid is " + ctx.uid);
   ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
-    if (result !== null && result != '' && result != undefined) {
+    if (result !== null && result != "" && result != undefined) {
       let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
