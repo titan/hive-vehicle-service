@@ -1,12 +1,25 @@
 import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
 import { Client as PGClient, ResultSet } from "pg";
-import { createClient, RedisClient } from "redis";
+import { RedisClient, Multi } from "redis";
 import * as bunyan from "bunyan";
 import { servermap, triggermap } from "hive-hostmap";
 import * as uuid from "node-uuid";
 import * as msgpack from "msgpack-lite";
 import * as nanomsg from "nanomsg";
 import * as http from "http";
+import * as bluebird from "bluebird";
+
+declare module "redis" {
+  export interface RedisClient extends NodeJS.EventEmitter {
+    hgetAsync(key: string, field: string): Promise<any>;
+    hincrbyAsync(key: string, field: string, value: number): Promise<any>;
+    setexAsync(key: string, ttl: number, value: string): Promise<any>;
+  }
+  export interface Multi extends NodeJS.EventEmitter {
+    execAsync(): Promise<any>;
+  }
+}
+
 
 let log = bunyan.createLogger({
   name: "vehicle-processor",
@@ -43,164 +56,140 @@ let vehicle_trigger = nanomsg.socket("pub");
 vehicle_trigger.bind(triggermap.vehicle);
 
 // 新车已上牌个人
-processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, license_no: string, engine_no: string,
-  register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string) => {
+processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
+  register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string, callback: string) => {
   log.info("setVehicleOnCard");
-  // insert a record into person
-  db.query("BEGIN", [], (err: Error) => {
-    db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone], (err: Error) => {
-      if (err) {
-        log.error(err, "query error");
-        db.query("ROLLBACK", [], (err: Error) => {
-          done();
-        });
+  (async () => {
+    try {
+      let pid = "";
+      await db.query("BEGIN");
+      const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      log.info("old person: " + JSON.stringify(person.rows));
+      if (person["rowCount"] !== 0) {
+        pid = person.rows[0]["id"];
       } else {
-        // insert a record into vehicle
-        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin], (err: Error) => {
-          if (err) {
-            log.error(err, "query error");
-            db.query("ROLLBACK", [], (err: Error) => {
-              done();
-            });
-          } else {
-            db.query("COMMIT", [], (err: Error) => {
-              if (err) {
-                log.error(err, "query error");
-                done();
-              } else {
-                let vehicle = {
-                  id: vid,
-                  user_id: uid,
-                  owner: {
-                    id: pid,
-                    name: name,
-                    identity_no: identity_no,
-                    phone: phone
-                  },
-                  owner_type: 0,
-                  recommend: recommend,
-                  drivers: [],
-                  vehicle_code: vehicle_code,
-                  vin_code: vin,
-                  license_no: license_no,
-                  engine_no: engine_no,
-                  register_date: register_date,
-                  average_mileage: average_mileage,
-                  is_transfer: is_transfer,
-                  last_insurance_company: last_insurance_company,
-                  insurance_due_date: insurance_due_date,
-                  fuel_type: fuel_type
-                };
-                cache.hget("vehicle-model-entities", vehicle_code, function (err, result) {
-                  if (err) {
-                    log.info(err);
-                    done();
-                  } else if (result) {
-                    vehicle["vehicle_model"] = JSON.parse(result);
-                    let multi = cache.multi();
-                    multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-                    multi.lpush("vehicle-" + uid, vid);
-                    multi.lpush("vehicle", vid);
-                    multi.exec((err2, replies) => {
-                      if (err2) {
-                        log.error(err + "vehicle:" + vehicle);
-                        done();
-                      } else {
-                        done();
-                      }
-                    });
-                  } else {
-                    log.info("not found vehicle_model");
-                    done();
-                  }
-                });
-              }
-            });
-          }
-        });
+        pid = uuid.v1();
+        log.info("new perosn" + pid);
+        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
-    });
-  });
+      let vids = await db.query("SELECT id FROM vehicles WHERE vin = $1", [vin]);
+      let vid = "";
+      if (vids["rowCount"] !== 0) {
+        log.info("old vehicle id" + JSON.stringify(vids.rows));
+        vid = vids.rows[0]["id"];
+      } else {
+        vid = uuid.v1();
+        log.info("new vehicle id: " + vid);
+        await db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
+        let vehicle = {
+          id: vid,
+          user_id: uid,
+          owner: {
+            id: pid,
+            name: name,
+            identity_no: identity_no,
+            phone: phone
+          },
+          owner_type: 0,
+          recommend: recommend,
+          drivers: [],
+          vehicle_code: vehicle_code,
+          vin_code: vin,
+          license_no: license_no,
+          engine_no: engine_no,
+          register_date: register_date,
+          average_mileage: average_mileage,
+          is_transfer: is_transfer,
+          last_insurance_company: last_insurance_company,
+          insurance_due_date: insurance_due_date,
+          fuel_type: fuel_type
+        };
+        const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
+        vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
+        let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+        multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        multi.lpush("vehicle-" + uid, vid);
+        multi.lpush("vehicle", vid);
+        await multi.execAsync();
+      }
+      await db.query("COMMIT");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
+      done();
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
 });
 
 // 新车未上牌个人
-processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFunction, pid: string, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, vid: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string) => {
+processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFunction, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string, callback: string) => {
   log.info("setVehicle");
-  db.query("BEGIN", [], (err: Error) => {
-    // insert a record into person
-    db.query("INSERT INTO person (id,name,identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone], (err: Error) => {
-      if (err) {
-        log.error(err, "query error");
-        db.query("ROLLBACK", [], (err: Error) => {
-          done();
-        });
+  (async () => {
+    try {
+      let pid = "";
+      await db.query("BEGIN");
+      const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      log.info("old person: " + JSON.stringify(person.rows));
+      if (person["rowCount"] !== 0) {
+        pid = person.rows[0]["id"];
       } else {
-        // insert a record into vehicle
-        db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin], (err: Error) => {
-          if (err) {
-            log.error(err, "query error");
-            db.query("ROLLBACK", [], (err: Error) => {
-              done();
-            });
-          } else {
-            db.query("COMMIT", [], (err: Error) => {
-              if (err) {
-                log.error(err, "query error");
-                done();
-              } else {
-                let vehicle = {
-                  id: vid,
-                  user_id: uid,
-                  owner: {
-                    id: pid,
-                    name: name,
-                    identity_no: identity_no,
-                    phone: phone
-                  },
-                  owner_type: 0,
-                  recommend: recommend,
-                  drivers: [],
-                  vehicle_code: vehicle_code,
-                  vin_code: vin,
-                  engine_no: engine_no,
-                  license_no: null,
-                  average_mileage: average_mileage,
-                  is_transfer: is_transfer,
-                  receipt_no: receipt_no,
-                  receipt_date: receipt_date,
-                  last_insurance_company: last_insurance_company,
-                  fuel_type: fuel_type
-                };
-                cache.hget("vehicle-model-entities", vehicle_code, function (err, result) {
-                  if (err) {
-                    log.info(err);
-                    done();
-                  } else if (result) {
-                    vehicle["vehicle_model"] = JSON.parse(result);
-                    let multi = cache.multi();
-                    multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-                    multi.lpush("vehicle-" + uid, vid);
-                    multi.lpush("vehicle", vid);
-                    multi.exec((err2, replies) => {
-                      if (err2) {
-                        log.error(err + "vehicle:" + vehicle);
-                        done();
-                      } else {
-                        done();
-                      }
-                    });
-                  } else {
-                    log.info("not found vehicle_model");
-                    done();
-                  }
-                });
-              }
-            });
-          }
-        });
+        pid = uuid.v1();
+        log.info("new perosn" + pid);
+        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
-    });
-  });
+      let vids = await db.query("SELECT id FROM vehicles WHERE vin = $1", [vin]);
+      let vid = "";
+      if (vids["rowCount"] !== 0) {
+        log.info("old vehicle id" + JSON.stringify(vids.rows));
+        vid = vids.rows[0]["id"];
+      } else {
+        vid = uuid.v1();
+        log.info("new vehicle id: " + vid);
+        await db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
+        let vehicle = {
+          id: vid,
+          user_id: uid,
+          owner: {
+            id: pid,
+            name: name,
+            identity_no: identity_no,
+            phone: phone
+          },
+          owner_type: 0,
+          recommend: recommend,
+          drivers: [],
+          vehicle_code: vehicle_code,
+          vin_code: vin,
+          engine_no: engine_no,
+          license_no: null,
+          average_mileage: average_mileage,
+          is_transfer: is_transfer,
+          receipt_no: receipt_no,
+          receipt_date: receipt_date,
+          last_insurance_company: last_insurance_company,
+          fuel_type: fuel_type
+        };
+        const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
+        vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
+        let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+        multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        multi.lpush("vehicle-" + uid, vid);
+        multi.lpush("vehicle", vid);
+        await multi.execAsync();
+      }
+      await db.query("COMMIT");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
+      done();
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
 });
 
 interface InsertDriverCtx {
@@ -575,7 +564,15 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           }
         }
         const vids = Object.keys(vehicles);
+        let vehicle_users: Object = {};
         for (let vid of vids) {
+          if (vehicle_users.hasOwnProperty(vehicles[vid]["user_id"])) {
+            if (!vehicle_users[vehicles[vid]["user_id"]].some(v => v === vid)) {
+              vehicle_users[vehicles[vid]["user_id"]].push(vid);
+            }
+          } else {
+            vehicle_users[vehicles[vid]["user_id"]] = [vid];
+          }
           for (let pid of vehicles[vid]["pids"]) {
             if (pid !== null) {
               for (let row of result.rows) {
@@ -623,6 +620,9 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           // multi.hset("vehicle-vin-codes", vehicle["vehicle_model"]["vin_code"], vehicle["vehicle_model"]["vin_code"]);
           multi.hset("vehicle-model-entities", vehicle["vehicle_model"]["vin_code"], JSON.stringify(vehicle["vehicle_model"]));
           multi.sadd("vehicle-model", vehicle["vehicle_model"]["vin_code"]);
+        }
+        for(const key of Object.keys(vehicle_users)) {
+           multi.lpush("vehicle-" + key, vehicle_users[key]);
         }
         multi.exec((err: Error, _: any[]) => {
           if (err) {
