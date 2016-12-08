@@ -12,6 +12,7 @@ import * as bluebird from "bluebird";
 declare module "redis" {
   export interface RedisClient extends NodeJS.EventEmitter {
     hgetAsync(key: string, field: string): Promise<any>;
+    hsetAsync(key: string, field: string, field2: string): Promise<any>;
     hincrbyAsync(key: string, field: string, value: number): Promise<any>;
     setexAsync(key: string, ttl: number, value: string): Promise<any>;
   }
@@ -217,73 +218,120 @@ interface InsertDriverCtx {
   done: DoneFunction;
 }
 
-function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
-  if (persons.length === 0) {
-    ctx.done();
-  } else {
-    let person = persons.shift();
-    ctx.db.query("BEGIN", [], (err: Error) => {
-      let pid = ctx.pids.shift();
-      ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
-        if (err) {
-          log.error(err, "query error");
-          ctx.db.query("ROLLBACK", [], (err: Error) => {
-            insert_person_recur(ctx, []);
-          });
+// function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
+//   if (persons.length === 0) {
+//     ctx.done();
+
+//   } else {
+//     let person = persons.shift();
+//     ctx.db.query("BEGIN", [], (err: Error) => {
+//       let pid = ctx.pids.shift();
+//       ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
+//         if (err) {
+//           log.error(err, "query error");
+//           ctx.db.query("ROLLBACK", [], (err: Error) => {
+//             insert_person_recur(ctx, []);
+//           });
+//         } else {
+//           let did = ctx.dids.shift();
+//           ctx.db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, ctx.vid, pid, person["is_primary"]], (err: Error) => {
+//             if (err) {
+//               log.error(err, "query error");
+//               ctx.db.query("ROLLBACK", [], (err: Error) => {
+//                 insert_person_recur(ctx, []);
+//               });
+//             } else {
+//               ctx.db.query("COMMIT", [], (err: Error) => {
+//                 if (err) {
+//                   log.error(err, "query error");
+//                   insert_person_recur(ctx, []);
+//                 } else {
+//                   ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
+//                     if (result) {
+//                       let vehicle = JSON.parse(result);
+//                       vehicle["drivers"].push({
+//                         id: pid,
+//                         name: person["name"],
+//                         identity_no: person["identity_no"],
+//                         phone: person["phone"],
+//                         is_primary: person["is_primary"]
+//                       });
+//                       ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
+//                         vehicle_trigger.send(msgpack.encode({ vid: ctx.vid, vehicle }));
+//                         insert_person_recur(ctx, persons);
+//                       });
+//                     } else {
+//                       insert_person_recur(ctx, persons);
+//                     }
+//                   });
+//                 }
+//               });
+//             }
+//           });
+//         }
+//       });
+//     });
+//   }
+// }
+
+processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
+  log.info("setDriver " + vid);
+  (async () => {
+    try {
+      let pids = [];
+      await db.query("BEGIN");
+      let vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+      let vehicle = JSON.parse(vehicleJson);
+      for (let driver of drivers) {
+        const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [driver["identity_no"]]);
+        if (person["rowCount"] !== 0) {
+          let pid = person.rows[0]["id"];
+          log.info("old person" + JSON.stringify(person));
+          pids.push(pid);
+          log.info(pids);
+          const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND deleted = false", [pid]);
+          if (driverId["rowCount"] === 0) {
+            let did = uuid.v4();
+            log.info("new driver" + did);
+            await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
+            vehicle["drivers"].push({
+              id: pid,
+              name: driver["name"],
+              identity_no: driver["identity_no"],
+              phone: driver["phone"],
+              is_primary: driver["is_primary"]
+            });
+          }
+          log.info(JSON.stringify(vehicle));
         } else {
-          let did = ctx.dids.shift();
-          ctx.db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, ctx.vid, pid, person["is_primary"]], (err: Error) => {
-            if (err) {
-              log.error(err, "query error");
-              ctx.db.query("ROLLBACK", [], (err: Error) => {
-                insert_person_recur(ctx, []);
-              });
-            } else {
-              ctx.db.query("COMMIT", [], (err: Error) => {
-                if (err) {
-                  log.error(err, "query error");
-                  insert_person_recur(ctx, []);
-                } else {
-                  ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
-                    if (result) {
-                      let vehicle = JSON.parse(result);
-                      vehicle["drivers"].push({
-                        id: pid,
-                        name: person["name"],
-                        identity_no: person["identity_no"],
-                        phone: person["phone"],
-                        is_primary: person["is_primary"]
-                      });
-                      ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
-                        vehicle_trigger.send(msgpack.encode({ vid: ctx.vid, vehicle }));
-                        insert_person_recur(ctx, persons);
-                      });
-                    } else {
-                      insert_person_recur(ctx, persons);
-                    }
-                  });
-                }
-              });
-            }
+          let pid = uuid.v4();
+          let did = uuid.v4();
+          log.info("new person and new dirver " + pid + " and " + did);
+          pids.push(pid);
+          log.info("pids: " + pids);
+          await db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, driver["name"], driver["identity_no"], driver["phone"]]);
+          await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
+          vehicle["drivers"].push({
+            id: pid,
+            name: driver["name"],
+            identity_no: driver["identity_no"],
+            phone: driver["phone"],
+            is_primary: driver["is_primary"]
           });
+          log.info(JSON.stringify(vehicle));
         }
-      });
-    });
-  }
-}
-
-processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, pids: any, dids: any, vid: string, drivers: any) => {
-  log.info("setDriver");
-  let ctx = {
-    db,
-    cache,
-    done,
-    pids: pids,
-    dids: dids,
-    vid: vid
-  };
-
-  insert_person_recur(ctx, drivers);
+      }
+      await db.query("COMMIT");
+      await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: pids }));
+      done();
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
 });
 
 processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
