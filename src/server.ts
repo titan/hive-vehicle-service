@@ -558,9 +558,141 @@ svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: 
   wait_for_response(ctx.cache, callback, rep);
 });
 
-svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string) => {
+const provinces: Object = {
+  '上海': '310000',
+  '云南': '530000',
+  '内蒙古': '150000',
+  '北京': '110000',
+  '厦门': '350200',
+  '吉林': '220000',
+  '四川': '510000',
+  '大连': '210200',
+  '天津': '120000',
+  '宁夏': '640000',
+  '宁波': '330200',
+  '安徽': '340000',
+  '山东': '370000',
+  '山西': '140000',
+  '广东': '440000',
+  '广西': '450000',
+  '新疆': '650000',
+  '江苏': '320000',
+  '江西': '360000',
+  '河北': '130000',
+  '河南': '410000',
+  '浙江': '330000',
+  '海南': '460000',
+  '深圳': '440300',
+  '湖北': '420000',
+  '湖南': '430000',
+  '甘肃': '620000',
+  '福建': '350000',
+  '西藏': '540000',
+  '贵州': '520000',
+  '辽宁': '210000',
+  '重庆': '500000',
+  '陕西': '610000',
+  '青岛': '370200',
+  '青海': '630000',
+  '黑龙江': '230000'
+};
+
+svr.call("getCityCode", permissions, (ctx: Context, rep: ResponseFunction, provinceName: string, cityName: string) => {
+  log.info("provinceName: " + provinceName + " cityName: " + cityName);
+  if (!verify([stringVerifier("cityName", cityName), stringVerifier("provinceName", provinceName)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+
+  let provinceCode = provinces[provinceName];
+  if (provinceCode === undefined) {
+    rep({
+      code: 400,
+      msg: "Province Code Not Found!"
+    });
+  }
+
+  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+  let data: Object = {
+    "operType": "QCC",
+    "msg": "",
+    "sendTime": sendTimeString,
+    "sign": "",
+    "data": {
+      "applicationID": "FENGCHAOHUZHU_SERVICE",
+      "provinceCode": provinceCode
+    }
+  };
+
+  let postData: string = JSON.stringify(data);
+  let options = {
+    hostname: "139.198.1.73",
+    port: 8081,
+    method: "POST",
+    path: "/zkyq-web/city/queryCity",
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  let req = http.request(options, function (res) {
+    log.info("Status: " + res.statusCode);
+    res.setEncoding("utf8");
+
+    let result: string = "";
+
+    res.on("data", function (body) {
+      result += body;
+    });
+
+    res.on("end", function () {
+      let retData: Object = JSON.parse(result);
+      log.info(retData);
+      if (retData["state"] === "1" && retData["data"] !== undefined) {
+        let cityList = retData["data"];
+        for (let city of cityList) {
+          if (city.cityName === cityName) {
+            rep({
+              code: 200,
+              data: city.cityCode
+            });
+            return;
+          }
+        }
+        rep({
+          code: 200,
+          msg: "Not Found!"
+        });
+      } else {
+        rep({
+          code: 400,
+          msg: "Not Found!"
+        });
+      }
+    });
+
+    req.on('error', (e) => {
+      log.info(`problem with request: ${e.message}`);
+      rep({
+        code: 500,
+        msg: e.message
+      });
+    });
+  });
+
+  req.end(postData);
+});
+
+svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string, responseNumber) => {
   log.info("licenseNumber " + licenseNumber);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
+  if (!verify([stringVerifier("licenseNumber", licenseNumber), stringVerifier("responseNumber", responseNumber)], (errors: string[]) => {
     log.info(errors);
     rep({
       code: 400,
@@ -573,17 +705,20 @@ svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFun
   let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
 
   let data: Object = {
-    "operType": "BDB",
+    "operType": "JYK",
     "msg": "",
     "sendTime": sendTimeString,
     "sign": "",
     "data": {
-      "licenseNo": licenseNumber,
-      "applicationID": "FENGCHAOHUZHU_SERVICE"
+      "applicationID": "FENGCHAOHUZHU_SERVICE",
+      "responseNo": responseNumber,
+      "frameNo": "",
+      "licenseNo": licenseNumber
     }
   };
 
   let postData: string = JSON.stringify(data);
+
   let options = {
     hostname: "139.198.1.73",
     port: 8081,
@@ -608,10 +743,88 @@ svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFun
     res.on("end", function () {
       log.info(result);
       let retData: Object = JSON.parse(result);
-      if (retData["data"]["frameNo"] !== undefined && retData["data"]["frameNo"] !== null && retData["data"]["frameNo"] !== "") {
+      if (retData["msg"] === "success") {
         rep({
           code: 200,
-          data: retData["data"]["frameNo"]
+          data: retData["data"]
+        });
+      } else {
+        rep({
+          code: 400,
+          msg: "Not Found!"
+        });
+      }
+    });
+
+    req.on('error', (e) => {
+      log.info(`problem with request: ${e.message}`);
+      rep({
+        code: 500,
+        msg: e.message
+      });
+    });
+  });
+
+  req.end(postData);
+});
+
+svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string, responseNumber) => {
+  log.info("licenseNumber " + licenseNumber);
+  if (!verify([stringVerifier("licenseNumber", licenseNumber), stringVerifier("responseNumber", responseNumber)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+
+  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+  let data: Object = {
+    "operType": "JYK",
+    "msg": "",
+    "sendTime": sendTimeString,
+    "sign": "",
+    "data": {
+      "applicationID": "FENGCHAOHUZHU_SERVICE",
+      "responseNo": responseNumber,
+      "frameNo": "",
+      "licenseNo": licenseNumber
+    }
+  };
+
+  let postData: string = JSON.stringify(data);
+
+  let options = {
+    hostname: "139.198.1.73",
+    port: 8081,
+    method: "POST",
+    path: "/zkyq-web/prerelease/ifmEntry",
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  let req = http.request(options, function (res) {
+    log.info("Status: " + res.statusCode);
+    res.setEncoding("utf8");
+
+    let result: string = "";
+
+    res.on("data", function (body) {
+      result += body;
+    });
+
+    res.on("end", function () {
+      log.info(result);
+      let retData: Object = JSON.parse(result);
+      if (retData["msg"] === "success") {
+        rep({
+          code: 200,
+          data: retData["data"]
         });
       } else {
         rep({
