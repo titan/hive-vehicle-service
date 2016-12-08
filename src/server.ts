@@ -249,7 +249,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
 // 添加驾驶员信息
 svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
   for (let driver of drivers) {
-    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), stringVerifier("phone", driver["phone"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
+    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
       log.info(errors);
       rep({
         code: 400,

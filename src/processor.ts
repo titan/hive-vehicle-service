@@ -1,5 +1,5 @@
 import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
-import { Client as PGClient, ResultSet, QueryResult } from "pg";
+import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
 import * as bunyan from "bunyan";
 import { servermap, triggermap } from "hive-hostmap";
@@ -686,7 +686,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           multi.sadd("vehicle-model", vehicle["vehicle_model"]["vin_code"]);
         }
         for (const key of Object.keys(vehicle_users)) {
-          multi.lpush("vehicle-" + key, vehicle_users[key]);
+          multi.lpush("v-" + key, vehicle_users[key]);
         }
         multi.exec((err: Error, _: any[]) => {
           if (err) {
