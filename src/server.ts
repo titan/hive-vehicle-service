@@ -260,7 +260,7 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
     }
   }
   let callback = uuid.v1();
-  let args = [ vid, drivers, callback];
+  let args = [vid, drivers, callback];
   log.info("setDriver " + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
   wait_for_response(ctx.cache, callback, rep);
@@ -690,9 +690,24 @@ svr.call("getCityCode", permissions, (ctx: Context, rep: ResponseFunction, provi
   req.end(postData);
 });
 
-svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string, responseNumber) => {
-  log.info("licenseNumber " + licenseNumber);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber), stringVerifier("responseNumber", responseNumber)], (errors: string[]) => {
+svr.call("getModelsInfoByVehicleInfo", permissions, (ctx: Context, rep: ResponseFunction, vehicleInfo: Object) => {
+  // log.info("licenseNumber: " + licenseNumber + "responseNumber: " + responseNumber);
+  // if (vehicleInfo["responseNo"] === undefined ||
+  //   vehicleInfo["licenseNo"] === undefined ||
+  //   vehicleInfo["frameNo"] === undefined) {
+  //   rep({
+  //     code: 400,
+  //     msg: "Wrong arguments!"
+  //   });
+  // }
+
+  log.info("Here: ");
+  log.info(JSON.stringify(vehicleInfo));
+
+  if (!verify([stringVerifier("responseNo", vehicleInfo["responseNo"]),
+  stringVerifier("licenseNo", vehicleInfo["licenseNo"]),
+  stringVerifier("frameNo", vehicleInfo["frameNo"])
+  ], (errors: string[]) => {
     log.info(errors);
     rep({
       code: 400,
@@ -704,6 +719,8 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
 
   let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
 
+  log.info(sendTimeString);
+
   let data: Object = {
     "operType": "JYK",
     "msg": "",
@@ -711,13 +728,15 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
     "sign": "",
     "data": {
       "applicationID": "FENGCHAOHUZHU_SERVICE",
-      "responseNo": responseNumber,
-      "frameNo": "",
-      "licenseNo": licenseNumber
+      "responseNo": vehicleInfo["responseNo"],
+      "frameNo": vehicleInfo["frameNo"],
+      "licenseNo": vehicleInfo["licenseNo"]
     }
   };
 
   let postData: string = JSON.stringify(data);
+
+  log.info(postData);
 
   let options = {
     hostname: "139.198.1.73",
@@ -743,7 +762,7 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
     res.on("end", function () {
       log.info(result);
       let retData: Object = JSON.parse(result);
-      if (retData["msg"] === "success") {
+      if (retData["state"] === "1") {
         rep({
           code: 200,
           data: retData["data"]
@@ -751,26 +770,26 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
       } else {
         rep({
           code: 400,
-          msg: "Not Found!"
+          msg: retData["msg"]
         });
       }
-    });
 
-    req.on('error', (e) => {
-      log.info(`problem with request: ${e.message}`);
-      rep({
-        code: 500,
-        msg: e.message
+      req.on('error', (e) => {
+        log.info(`problem with request: ${e.message}`);
+        rep({
+          code: 500,
+          msg: e.message
+        });
       });
     });
   });
-
+  
   req.end(postData);
 });
 
-svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string, responseNumber) => {
+svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string) => {
   log.info("licenseNumber " + licenseNumber);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber), stringVerifier("responseNumber", responseNumber)], (errors: string[]) => {
+  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
     log.info(errors);
     rep({
       code: 400,
@@ -783,20 +802,17 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
   let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
 
   let data: Object = {
-    "operType": "JYK",
+    "operType": "BDB",
     "msg": "",
     "sendTime": sendTimeString,
     "sign": "",
     "data": {
-      "applicationID": "FENGCHAOHUZHU_SERVICE",
-      "responseNo": responseNumber,
-      "frameNo": "",
-      "licenseNo": licenseNumber
+      "licenseNo": licenseNumber,
+      "applicationID": "FENGCHAOHUZHU_SERVICE"
     }
   };
 
   let postData: string = JSON.stringify(data);
-
   let options = {
     hostname: "139.198.1.73",
     port: 8081,
@@ -819,9 +835,10 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
     });
 
     res.on("end", function () {
-      log.info(result);
       let retData: Object = JSON.parse(result);
-      if (retData["msg"] === "success") {
+      // log.info("Here: ");
+      // log.info(JSON.stringify(retData));
+      if (retData["state"] === "1") {
         rep({
           code: 200,
           data: retData["data"]
@@ -829,7 +846,7 @@ svr.call("getVehicleInfoByResponseNumber", permissions, (ctx: Context, rep: Resp
       } else {
         rep({
           code: 400,
-          msg: "Not Found!"
+          msg: retData["msg"]
         });
       }
     });
