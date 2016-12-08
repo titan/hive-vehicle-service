@@ -57,13 +57,11 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
   }
   ctx.cache.hget("order-entities", order_id, function (err, result) {
     if (result) {
-      // log.info("result===================" + result);
       let vid = JSON.parse(result).vehicle.id;
       ctx.cache.hget(vehicle_entities, vid, function (err2, result2) {
         if (err2) {
           rep({ code: 500, msg: err2 });
         } else {
-          // log.info("result2------------------" + JSON.parse(result2));
           if (result2 !== null) {
             let vehicle = JSON.parse(result2);
             let drivers = vehicle["drivers"];
@@ -105,27 +103,6 @@ svr.call("uploadStatus", permissions, (ctx: Context, rep: ResponseFunction, orde
       rep({ code: 500, msg: err });
     } else {
       rep({ code: 404, msg: "Not Found Order" });
-    }
-  });
-});
-
-
-// 获取车型信息
-svr.call("getVehicleModel", permissions, (ctx: Context, rep: ResponseFunction, vehicle_code: string) => {
-  if (!verify([stringVerifier("vehicle_code", vehicle_code)], (errors: string[]) => {
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
-  log.info("getVehicleModel vehicle_code:" + vehicle_code + "uid is " + ctx.uid);
-  ctx.cache.hget(entity_key, vehicle_code, function (err, result) {
-    if (err || result === null) {
-      rep({ code: 500, msg: "未知错误" });
-    } else {
-      rep({ code: 200, data: JSON.parse(result) });
     }
   });
 });
@@ -282,18 +259,11 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
       return;
     }
   }
-  let pids = [];
-  let dids = [];
-  for (let d of drivers) {
-    let pid = uuid.v4();
-    let did = uuid.v4();
-    pids.push(pid);
-    dids.push(did);
-  }
-  let args = [pids, dids, vid, drivers];
+  let callback = uuid.v1();
+  let args = [ vid, drivers, callback];
   log.info("setDriver " + args + "uid is " + ctx.uid);
   ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
-  rep({ code: 200, data: pids });
+  wait_for_response(ctx.cache, callback, rep);
 });
 
 // vehicle_model
