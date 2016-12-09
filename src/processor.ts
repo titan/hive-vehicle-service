@@ -141,7 +141,7 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       let pid = "";
       let owner = {};
       await db.query("BEGIN");
-      const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
       log.info("old person: " + JSON.stringify(person.rows));
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
