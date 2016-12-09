@@ -597,6 +597,213 @@ const provinces: Object = {
   '黑龙江': '230000'
 };
 
+// let pList = [
+//   {
+//     "provinceCode": "310000",
+//     "provinceName": "上海"
+//   },
+//   {
+//     "provinceCode": "530000",
+//     "provinceName": "云南"
+//   },
+//   {
+//     "provinceCode": "150000",
+//     "provinceName": "内蒙古"
+//   },
+//   {
+//     "provinceCode": "110000",
+//     "provinceName": "北京"
+//   },
+//   {
+//     "provinceCode": "350200",
+//     "provinceName": "厦门"
+//   },
+//   {
+//     "provinceCode": "220000",
+//     "provinceName": "吉林"
+//   },
+//   {
+//     "provinceCode": "510000",
+//     "provinceName": "四川"
+//   },
+//   {
+//     "provinceCode": "210200",
+//     "provinceName": "大连"
+//   },
+//   {
+//     "provinceCode": "120000",
+//     "provinceName": "天津"
+//   },
+//   {
+//     "provinceCode": "640000",
+//     "provinceName": "宁夏"
+//   },
+//   {
+//     "provinceCode": "330200",
+//     "provinceName": "宁波"
+//   },
+//   {
+//     "provinceCode": "340000",
+//     "provinceName": "安徽"
+//   },
+//   {
+//     "provinceCode": "370000",
+//     "provinceName": "山东"
+//   },
+//   {
+//     "provinceCode": "140000",
+//     "provinceName": "山西"
+//   },
+//   {
+//     "provinceCode": "440000",
+//     "provinceName": "广东"
+//   },
+//   {
+//     "provinceCode": "450000",
+//     "provinceName": "广西"
+//   },
+//   {
+//     "provinceCode": "650000",
+//     "provinceName": "新疆"
+//   },
+//   {
+//     "provinceCode": "320000",
+//     "provinceName": "江苏"
+//   },
+//   {
+//     "provinceCode": "360000",
+//     "provinceName": "江西"
+//   },
+//   {
+//     "provinceCode": "130000",
+//     "provinceName": "河北"
+//   },
+//   {
+//     "provinceCode": "410000",
+//     "provinceName": "河南"
+//   },
+//   {
+//     "provinceCode": "330000",
+//     "provinceName": "浙江"
+//   },
+//   {
+//     "provinceCode": "460000",
+//     "provinceName": "海南"
+//   },
+//   {
+//     "provinceCode": "440300",
+//     "provinceName": "深圳"
+//   },
+//   {
+//     "provinceCode": "420000",
+//     "provinceName": "湖北"
+//   },
+//   {
+//     "provinceCode": "430000",
+//     "provinceName": "湖南"
+//   },
+//   {
+//     "provinceCode": "620000",
+//     "provinceName": "甘肃"
+//   },
+//   {
+//     "provinceCode": "350000",
+//     "provinceName": "福建"
+//   },
+//   {
+//     "provinceCode": "540000",
+//     "provinceName": "西藏"
+//   },
+//   {
+//     "provinceCode": "520000",
+//     "provinceName": "贵州"
+//   },
+//   {
+//     "provinceCode": "210000",
+//     "provinceName": "辽宁"
+//   },
+//   {
+//     "provinceCode": "500000",
+//     "provinceName": "重庆"
+//   },
+//   {
+//     "provinceCode": "610000",
+//     "provinceName": "陕西"
+//   },
+//   {
+//     "provinceCode": "370200",
+//     "provinceName": "青岛"
+//   },
+//   {
+//     "provinceCode": "630000",
+//     "provinceName": "青海"
+//   },
+//   {
+//     "provinceCode": "230000",
+//     "provinceName": "黑龙江"
+//   }
+// ];
+
+// for (let i = 0; i < pList.length; i++) {
+
+
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+//   let data: Object = {
+//     "operType": "QCC",
+//     "msg": "",
+//     "sendTime": sendTimeString,
+//     "sign": "",
+//     "data": {
+//       "applicationID": "FENGCHAOHUZHU_SERVICE",
+//       "provinceCode": pList[i]["provinceCode"]
+//     }
+//   };
+
+//   let postData: string = JSON.stringify(data);
+//   let options = {
+//     hostname: "139.198.1.73",
+//     port: 8081,
+//     method: "POST",
+//     path: "/zkyq-web/city/queryCity",
+//     headers: {
+//       'Content-Type': 'application/json',
+//       'Content-Length': Buffer.byteLength(postData)
+//     }
+//   };
+
+//   let req = http.request(options, function (res) {
+//     log.info("Status: " + res.statusCode);
+//     res.setEncoding("utf8");
+
+//     let result: string = "";
+
+//     res.on("data", function (body) {
+//       result += body;
+//     });
+
+//     res.on("end", function () {
+//       let retData: Object = JSON.parse(result);
+//       retData["provinceCode"] = pList[i]["provinceCode"];
+//       retData["provinceName"] = pList[i]["provinceName"];
+//       if (retData["state"] === "1" && retData["data"] !== undefined) {
+//         let cityList = retData["data"];
+//         log.info(retData);
+
+//         // log.info(JSON.stringify(cityList));
+//       } else {
+//         log.info(retData["msg"]);
+//       }
+//     });
+
+//     req.on('error', (e) => {
+//       log.info(`problem with request: ${e.message}`);
+//     });
+//   });
+
+//   req.end(postData);
+// }
+
 svr.call("getCityCode", permissions, (ctx: Context, rep: ResponseFunction, provinceName: string, cityName: string) => {
   log.info("provinceName: " + provinceName + " cityName: " + cityName);
   if (!verify([stringVerifier("cityName", cityName), stringVerifier("provinceName", provinceName)], (errors: string[]) => {
@@ -783,7 +990,7 @@ svr.call("getModelsInfoByVehicleInfo", permissions, (ctx: Context, rep: Response
       });
     });
   });
-  
+
   req.end(postData);
 });
 
@@ -843,6 +1050,153 @@ svr.call("getVehicleInfoByLicense", permissions, (ctx: Context, rep: ResponseFun
           code: 200,
           data: retData["data"]
         });
+      } else {
+        rep({
+          code: 400,
+          msg: retData["msg"]
+        });
+      }
+    });
+
+
+    req.on('error', (e) => {
+      log.info(`problem with request: ${e.message}`);
+      rep({
+        code: 500,
+        msg: e.message
+      });
+    });
+  });
+
+  req.end(postData);
+});
+
+svr.call("getCarInfoByLicense", permissions, (ctx: Context, rep: ResponseFunction, licenseNumber: string) => {
+  log.info("licenseNumber " + licenseNumber);
+  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+
+  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+  let data: Object = {
+    "operType": "BDB",
+    "msg": "",
+    "sendTime": sendTimeString,
+    "sign": "",
+    "data": {
+      "licenseNo": licenseNumber,
+      "applicationID": "FENGCHAOHUZHU_SERVICE"
+    }
+  };
+
+  let postData: string = JSON.stringify(data);
+  let options = {
+    hostname: "139.198.1.73",
+    port: 8081,
+    method: "POST",
+    path: "/zkyq-web/prerelease/ifmEntry",
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  };
+
+  let req = http.request(options, function (res) {
+    log.info("Status: " + res.statusCode);
+    res.setEncoding("utf8");
+
+    let result: string = "";
+
+    res.on("data", function (body) {
+      result += body;
+    });
+
+    res.on("end", function () {
+      let retData: Object = JSON.parse(result);
+      // log.info("Here: ");
+      // log.info(JSON.stringify(retData));
+
+      if (retData["state"] === "1") {
+        // rep({
+        //   code: 200,
+        //   data: retData["data"]
+        // });
+        let vehicleInfo = retData["data"];
+
+
+        let data: Object = {
+          "operType": "JYK",
+          "msg": "",
+          "sendTime": sendTimeString,
+          "sign": "",
+          "data": {
+            "applicationID": "FENGCHAOHUZHU_SERVICE",
+            "responseNo": vehicleInfo["responseNo"],
+            "frameNo": vehicleInfo["frameNo"],
+            "licenseNo": vehicleInfo["licenseNo"]
+          }
+        };
+
+        let postData: string = JSON.stringify(data);
+
+        // log.info(postData);
+
+        let options = {
+          hostname: "139.198.1.73",
+          port: 8081,
+          method: "POST",
+          path: "/zkyq-web/prerelease/ifmEntry",
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          }
+        };
+
+        let req = http.request(options, function (res) {
+          log.info("Status: " + res.statusCode);
+          res.setEncoding("utf8");
+
+          let result: string = "";
+
+          res.on("data", function (body) {
+            result += body;
+          });
+
+          res.on("end", function () {
+            // log.info(result);
+            let retData: Object = JSON.parse(result);
+            if (retData["state"] === "1") {
+              vehicleInfo["modelList"] = retData;
+              rep({
+                code: 200,
+                // data: retData["data"]
+                data: vehicleInfo
+              });
+            } else {
+              rep({
+                code: 400,
+                msg: retData["msg"]
+              });
+            }
+
+            req.on('error', (e) => {
+              log.info(`problem with request: ${e.message}`);
+              rep({
+                code: 500,
+                msg: e.message
+              });
+            });
+          });
+        });
+
+        req.end(postData);
       } else {
         rep({
           code: 400,
