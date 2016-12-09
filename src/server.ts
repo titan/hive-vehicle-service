@@ -267,8 +267,9 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
 });
 
 // vehicle_model
-svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
-  log.info("getVehicleModelsByMake vin: " + vin + "uid is " + ctx.uid);
+svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunction, vin_code: string) => {
+  log.info("getVehicleModelsByMake vin: " + vin_code + "uid is " + ctx.uid);
+  let vin = vin_code.toUpperCase();
   if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
@@ -284,7 +285,6 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
         msg: err
       });
     } else if (result) {
-      // log.info("result---------" + JSON.stringify(result));
       let multi = ctx.cache.multi();
       for (let code of JSON.parse(result)) {
         multi.hget("vehicle-model-entities", code);
@@ -334,8 +334,9 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
           let arg = JSON.parse(chunk.toString());
           let args = arg.result;
           if (args) {
-            ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-            rep({ code: 200, data: args.vehicleList });
+            let callback = uuid.v1();
+            ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin, callback] }));
+            wait_for_response(ctx.cache, callback, rep);
           } else {
             rep({
               code: 404,
@@ -356,90 +357,6 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
       req.write(data);
       req.end();
     }
-    // if (err) {
-    //   rep({
-    //     code: 500,
-    //     msg: err
-    //   });
-    // } else {
-    //   if (result === null) {
-    //     let data = JSON.stringify({
-    //       "channelType": "00",
-    //       "requestCode": "100103",
-    //       "operatorCode": "dev@fengchaohuzhu.com",
-    //       "data": {
-    //         "vinCode": vin
-    //       },
-    //       "dtype": "json",
-    //       "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
-    //     });
-    //     let options = {
-    //       // hostname:"www.baidu.coddm",
-    //       hostname: "www.jy-epc.com",
-    //       port: 80,
-    //       path: "/api-show/NqAfterMarketDataServlet",
-    //       method: "POST",
-    //       headers: {
-    //         "Content-Type": "application/x-json",
-    //         "Content-Length": data.length
-    //       }
-    //     };
-
-    //     let req = http.request(options, (res) => {
-    //       console.log(`STATUS: ${res.statusCode}`);
-    //       console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
-    //       res.setEncoding("utf8");
-    //       res.on("data", (chunk) => {
-    //         let arg = JSON.parse(chunk);
-    //         let args = arg.result;
-    //         if (args) {
-    //           ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-    //           rep({ code: 200, data: args.vehicleList });
-    //         } else {
-    //           rep({
-    //             code: 404,
-    //             msg: "b车型没找到"
-    //           });
-    //         }
-    //       });
-    //       res.on("end", () => {
-    //       });
-    //     });
-    //     req.on("error", (e) => {
-    //       rep({
-    //         code: 404,
-    //         msg: "c车型没找到"
-    //       });
-    //     });
-
-    //     req.write(data);
-    //     req.end();
-    //   } else {
-    //     ctx.cache.hget("vehicle-vin-codes", vin, (err, result) => {
-    //       if (result) {
-    //         let multi = ctx.cache.multi();
-    //         for (let code of JSON.parse(result)) {
-    //           multi.hget("vehicle-model-entities", code);
-    //         }
-    //         multi.exec((err, models) => {
-    //           if (models) {
-    //             rep({ code: 200, data: models.map(e => JSON.parse(e)) });
-    //           } else {
-    //             rep({
-    //               code: 404,
-    //               msg: "d车型没找到"
-    //             });
-    //           }
-    //         });
-    //       } else {
-    //         rep({
-    //           code: 404,
-    //           msg: "e车型没找到"
-    //         });
-    //       }
-    //     });
-    //   }
-    // }
   });
 });
 

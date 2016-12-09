@@ -218,62 +218,6 @@ interface InsertDriverCtx {
   done: DoneFunction;
 }
 
-// function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
-//   if (persons.length === 0) {
-//     ctx.done();
-
-//   } else {
-//     let person = persons.shift();
-//     ctx.db.query("BEGIN", [], (err: Error) => {
-//       let pid = ctx.pids.shift();
-//       ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
-//         if (err) {
-//           log.error(err, "query error");
-//           ctx.db.query("ROLLBACK", [], (err: Error) => {
-//             insert_person_recur(ctx, []);
-//           });
-//         } else {
-//           let did = ctx.dids.shift();
-//           ctx.db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, ctx.vid, pid, person["is_primary"]], (err: Error) => {
-//             if (err) {
-//               log.error(err, "query error");
-//               ctx.db.query("ROLLBACK", [], (err: Error) => {
-//                 insert_person_recur(ctx, []);
-//               });
-//             } else {
-//               ctx.db.query("COMMIT", [], (err: Error) => {
-//                 if (err) {
-//                   log.error(err, "query error");
-//                   insert_person_recur(ctx, []);
-//                 } else {
-//                   ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
-//                     if (result) {
-//                       let vehicle = JSON.parse(result);
-//                       vehicle["drivers"].push({
-//                         id: pid,
-//                         name: person["name"],
-//                         identity_no: person["identity_no"],
-//                         phone: person["phone"],
-//                         is_primary: person["is_primary"]
-//                       });
-//                       ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
-//                         vehicle_trigger.send(msgpack.encode({ vid: ctx.vid, vehicle }));
-//                         insert_person_recur(ctx, persons);
-//                       });
-//                     } else {
-//                       insert_person_recur(ctx, persons);
-//                     }
-//                   });
-//                 }
-//               });
-//             }
-//           });
-//         }
-//       });
-//     });
-//   }
-// }
-
 processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
   log.info("setDriver " + vid);
   (async () => {
@@ -469,44 +413,36 @@ interface InsertModelCtx {
   models: Object[];
 };
 
-function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
-  if (models.length === 0) {
-    let multi = ctx.cache.multi();
-    let codes = [];
-    for (let model of ctx.models) {
-      model["vin_code"] = ctx.vin;
-      multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
-      codes.push(model["vehicleCode"]);
+processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string, callback: string) => {
+  log.info("getVehicleModelsByMake " + vin);
+  (async () => {
+    try {
+      await db.query("BEGIN");
+      let models = args2.vehicleList.map(e => e);
+      for (let model of models) {
+        await db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
+      }
+      await db.query("COMMIT");
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      let codes = [];
+      for (let model of models) {
+        model["vin_code"] = vin;
+        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
+        codes.push(model["vehicleCode"]);
+      }
+      multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
+      multi.sadd("vehicle-model", vin);
+      await multi.execAsync();
+      await cache.setex(callback, 30, JSON.stringify({ code: 200, data: vin }));
+      done();
+      log.info("getVehicleModelsByMake success");
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
     }
-    multi.hset("vehicle-vin-codes", ctx.vin, JSON.stringify(codes));
-    multi.sadd("vehicle-model", ctx.vin);
-    multi.exec((err, replies) => {
-      if (err) {
-        log.error(err);
-      }
-      ctx.done(); // close db and cache connection
-    });
-  } else {
-    let model = models.shift();
-    ctx.db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]], (err: Error) => {
-      if (err) {
-        log.error(err, "query error");
-      }
-      insert_vehicle_model_recur(ctx, models);
-    });
-  }
-}
-
-processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string) => {
-  log.info("getVehicleModelsByMake");
-  let ctx = {
-    db,
-    cache,
-    done,
-    vin: vin,
-    models: args2.vehicleList.map(e => e)
-  };
-  insert_vehicle_model_recur(ctx, args2.vehicleList);
+  })();
 });
 
 function row2model(row: Object) {
@@ -660,7 +596,6 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           if (vehicles[vid]["owid"] !== null) {
             for (let row of result.rows) {
               if (vehicles[vid]["owid"] === row.p_id) {
-                log.info(vehicles[vid]["owid"] + "---------" + row.p_id);
                 vehicles[vid]["owner"].id = row.p_id;
                 vehicles[vid]["owner"].name = trim(row.p_name);
                 vehicles[vid]["owner"].identity_no = trim(row.p_identity);
@@ -686,7 +621,7 @@ function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
           multi.sadd("vehicle-model", vehicle["vehicle_model"]["vin_code"]);
         }
         for (const key of Object.keys(vehicle_users)) {
-          multi.lpush("v-" + key, vehicle_users[key]);
+          multi.lpush("vehicle-" + key, vehicle_users[key]);
         }
         multi.exec((err: Error, _: any[]) => {
           if (err) {
