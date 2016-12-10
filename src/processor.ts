@@ -144,7 +144,7 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       await db.query("BEGIN");
       const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
       log.info("old person: " + JSON.stringify(person.rows));
-      if (person["rowCount"] !== 0) {
+      if (person["rowCoun"] !== 0) {
         pid = person.rows[0]["id"];
         owner = {
           id: pid,
@@ -422,7 +422,10 @@ processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done
       await db.query("BEGIN");
       let models = args2.vehicleList.map(e => e);
       for (let model of models) {
-        await db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
+        let dbmodel = await db.query("SELECT * FROM vehicle_model WHERE vehicle_code = $1", [model["vehicleCode"]]);
+        if (dbmodel["rowCount"] === 0) {
+          await db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
+        }
       }
       await db.query("COMMIT");
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
@@ -585,7 +588,7 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
         }
       }
       for (const key of Object.keys(vehicleUsers)) {
-          multi.lpush("vehicle-" + key, vehicleUsers[key]);
+        multi.lpush("vehicle-" + key, vehicleUsers[key]);
       }
       await multi.execAsync();
       await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: "refresh success" }));
