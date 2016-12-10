@@ -187,7 +187,7 @@ svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: s
             break;
           }
         }
-        if (result2 === null) {
+        if (result2 === null || result2 === undefined || result2 === "") {
           rep({ code: 404, msg: "not found driver" });
         } else {
           rep({ code: 200, data: result2 });

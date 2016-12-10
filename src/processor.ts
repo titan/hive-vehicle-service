@@ -91,6 +91,7 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
       if (vids["rowCount"] !== 0) {
         log.info("old vehicle id" + JSON.stringify(vids.rows));
         vid = vids.rows[0]["id"];
+        // await db.query("UPDATE vehicles SET ")
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
@@ -234,8 +235,7 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
           let pid = person.rows[0]["id"];
           log.info("old person" + JSON.stringify(person));
           pids.push(pid);
-          log.info(pids);
-          const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND deleted = false", [pid]);
+          const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
           if (driverId["rowCount"] === 0) {
             let did = uuid.v4();
             log.info("new driver" + did);
@@ -254,7 +254,6 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
           let did = uuid.v4();
           log.info("new person and new dirver " + pid + " and " + did);
           pids.push(pid);
-          log.info("pids: " + pids);
           await db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, driver["name"], driver["identity_no"], driver["phone"]]);
           await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
           vehicle["drivers"].push({
@@ -269,6 +268,7 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
       }
       await db.query("COMMIT");
       await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+      log.info("pids========== " + pids);
       await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: pids }));
       done();
     } catch (e) {
@@ -438,7 +438,7 @@ processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done
       multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
       multi.sadd("vehicle-model", vin);
       await multi.execAsync();
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vin }));
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: args2.vehicleList}));
       done();
       log.info("getVehicleModelsByMake success");
     } catch (e) {
