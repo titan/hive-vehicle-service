@@ -1,5 +1,5 @@
 import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
-import { Client as PGClient, ResultSet, QueryResult } from "pg";
+import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
 import * as bunyan from "bunyan";
 import { servermap, triggermap } from "hive-hostmap";
@@ -117,6 +117,7 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
         multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        log.info("vid ==> " + vid);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
@@ -141,9 +142,9 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       let pid = "";
       let owner = {};
       await db.query("BEGIN");
-      const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
       log.info("old person: " + JSON.stringify(person.rows));
-      if (person["rowCount"] !== 0) {
+      if (person["rowCoun"] !== 0) {
         pid = person.rows[0]["id"];
         owner = {
           id: pid,
@@ -193,6 +194,7 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
         multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        log.info("vid ==>" + vid);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
@@ -218,62 +220,6 @@ interface InsertDriverCtx {
   done: DoneFunction;
 }
 
-// function insert_person_recur(ctx: InsertDriverCtx, persons: Object[]) {
-//   if (persons.length === 0) {
-//     ctx.done();
-
-//   } else {
-//     let person = persons.shift();
-//     ctx.db.query("BEGIN", [], (err: Error) => {
-//       let pid = ctx.pids.shift();
-//       ctx.db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, person["name"], person["identity_no"], person["phone"]], (err: Error) => {
-//         if (err) {
-//           log.error(err, "query error");
-//           ctx.db.query("ROLLBACK", [], (err: Error) => {
-//             insert_person_recur(ctx, []);
-//           });
-//         } else {
-//           let did = ctx.dids.shift();
-//           ctx.db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, ctx.vid, pid, person["is_primary"]], (err: Error) => {
-//             if (err) {
-//               log.error(err, "query error");
-//               ctx.db.query("ROLLBACK", [], (err: Error) => {
-//                 insert_person_recur(ctx, []);
-//               });
-//             } else {
-//               ctx.db.query("COMMIT", [], (err: Error) => {
-//                 if (err) {
-//                   log.error(err, "query error");
-//                   insert_person_recur(ctx, []);
-//                 } else {
-//                   ctx.cache.hget("vehicle-entities", ctx.vid, (err, result) => {
-//                     if (result) {
-//                       let vehicle = JSON.parse(result);
-//                       vehicle["drivers"].push({
-//                         id: pid,
-//                         name: person["name"],
-//                         identity_no: person["identity_no"],
-//                         phone: person["phone"],
-//                         is_primary: person["is_primary"]
-//                       });
-//                       ctx.cache.hset("vehicle-entities", ctx.vid, JSON.stringify(vehicle), (err, result) => {
-//                         vehicle_trigger.send(msgpack.encode({ vid: ctx.vid, vehicle }));
-//                         insert_person_recur(ctx, persons);
-//                       });
-//                     } else {
-//                       insert_person_recur(ctx, persons);
-//                     }
-//                   });
-//                 }
-//               });
-//             }
-//           });
-//         }
-//       });
-//     });
-//   }
-// }
-
 processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
   log.info("setDriver " + vid);
   (async () => {
@@ -283,7 +229,7 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
       let vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
       let vehicle = JSON.parse(vehicleJson);
       for (let driver of drivers) {
-        const person = await db.query("SELECT id FROM person WHERE identity_no = $1 AND deleted = false", [driver["identity_no"]]);
+        const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [driver["identity_no"]]);
         if (person["rowCount"] !== 0) {
           let pid = person.rows[0]["id"];
           log.info("old person" + JSON.stringify(person));
@@ -296,9 +242,9 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
             await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
             vehicle["drivers"].push({
               id: pid,
-              name: driver["name"],
-              identity_no: driver["identity_no"],
-              phone: driver["phone"],
+              name: person.rows[0]["name"],
+              identity_no: person.rows[0]["identity_no"],
+              phone: person.rows[0]["phone"],
               is_primary: driver["is_primary"]
             });
           }
@@ -469,50 +415,45 @@ interface InsertModelCtx {
   models: Object[];
 };
 
-function insert_vehicle_model_recur(ctx: InsertModelCtx, models: Object[]) {
-  if (models.length === 0) {
-    let multi = ctx.cache.multi();
-    let codes = [];
-    for (let model of ctx.models) {
-      model["vin_code"] = ctx.vin;
-      multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
-      codes.push(model["vehicleCode"]);
+processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string, callback: string) => {
+  log.info("getVehicleModelsByMake " + vin);
+  (async () => {
+    try {
+      await db.query("BEGIN");
+      let models = args2.vehicleList.map(e => e);
+      for (let model of models) {
+        let dbmodel = await db.query("SELECT * FROM vehicle_model WHERE vehicle_code = $1", [model["vehicleCode"]]);
+        if (dbmodel["rowCount"] === 0) {
+          await db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
+        }
+      }
+      await db.query("COMMIT");
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      let codes = [];
+      for (let model of models) {
+        model["vin_code"] = vin;
+        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
+        codes.push(model["vehicleCode"]);
+      }
+      multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
+      multi.sadd("vehicle-model", vin);
+      await multi.execAsync();
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vin }));
+      done();
+      log.info("getVehicleModelsByMake success");
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
     }
-    multi.hset("vehicle-vin-codes", ctx.vin, JSON.stringify(codes));
-    multi.sadd("vehicle-model", ctx.vin);
-    multi.exec((err, replies) => {
-      if (err) {
-        log.error(err);
-      }
-      ctx.done(); // close db and cache connection
-    });
-  } else {
-    let model = models.shift();
-    ctx.db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]], (err: Error) => {
-      if (err) {
-        log.error(err, "query error");
-      }
-      insert_vehicle_model_recur(ctx, models);
-    });
-  }
-}
-
-processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string) => {
-  log.info("getVehicleModelsByMake");
-  let ctx = {
-    db,
-    cache,
-    done,
-    vin: vin,
-    models: args2.vehicleList.map(e => e)
-  };
-  insert_vehicle_model_recur(ctx, args2.vehicleList);
+  })();
 });
 
 function row2model(row: Object) {
   return {
     vehicleCode: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
-    vin_code: row["vin_code"] ? row["vin_code"].trim() : "",
+    vin_code: row["vin"] ? row["vin"].trim() : "",
     vehicleName: row["vehicle_name"] ? row["vehicle_name"].trim() : "",
     brandName: row["brand_name"] ? row["brand_name"].trim() : "",
     familyName: row["family_name"] ? row["family_name"].trim() : "",
@@ -535,181 +476,57 @@ function row2model(row: Object) {
 function row2vehicle(row: Object) {
   return {
     id: row["id"] ? row["id"].trim() : "",
-    user_id: row["user_id"] ? row["user_id"].trim : "",
-    owner: row["owner"] ? row["owner"].trim : "",
-    owner_type: row["owner_type"] ? row["owner_type"].trim : "",
-    vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim : "",
-    license_no: row["license_no"] ? row["license_no"].trim : "",
-    engine_no: row["engine_no"] ? row["engine_no"].trim : "",
-    register_date: row["register_date"] ? row["register_date"].trim : "",
-    average_mileage: row["average_mileage"] ? row["average_mileage"].trim : "",
-    is_transfer: row["is_transfer"] ? row["is_transfer"].trim : "",
-    receipt_no: row["receipt_no"] ? row["receipt_no"].trim : "",
-    receipt_date: row["receipt_date"] ? row["receipt_date"].trim : "",
-    last_insurance_company: row["last_insurance_company"] ? row["last_insurance_company"].trim : "",
-    insurance_due_date: row["insurance_due_date"] ? row["insurance_due_date"].trim : "",
-    driving_frontal_view: row["driving_frontal_view"] ? row["driving_frontal_view"].trim : "",
-    driving_real_view: row["driving_real_view"] ? row["driving_real_view"].trim : "",
-    created_at: row["created_at"] ? row["created_at"].trim : "",
-    updated_at: row["updated_at"] ? row["updated_at"].trim : "",
-    recommend: row["recommend"] ? row["recommend"].trim : "",
-    fuel_type: row["fuel_type"] ? row["fuel_type"].trim : "",
+    user_id: row["user_id"] ? row["user_id"].trim() : "",
+    owner_type: row["owner_type"] ? row["owner_type"].trim() : "",
+    vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
+    license_no: row["license_no"] ? row["license_no"].trim() : "",
+    engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
+    register_date: row["register_date"],
+    average_mileage: row["average_mileage"] ? row["average_mileage"].trim() : "",
+    is_transfer: row["is_transfer"] ? row["is_transfer"].trim() : "",
+    receipt_no: row["receipt_no"] ? row["receipt_no"].trim() : "",
+    receipt_date: row["receipt_date"],
+    last_insurance_company: row["last_insurance_company"] ? row["last_insurance_company"].trim() : "",
+    insurance_due_date: row["insurance_due_date"],
+    driving_frontal_view: row["driving_frontal_view"] ? row["driving_frontal_view"].trim() : "",
+    driving_real_view: row["driving_real_view"] ? row["driving_real_view"].trim() : "",
+    recommend: row["recommend"] ? row["recommend"].trim() : "",
+    fuel_type: row["fuel_type"] ? row["fuel_type"].trim() : "",
+    accident_times: row["accident_times"],
+    vin_code: row["vin"] ? row["vin"].trim() : "",
+    created_at: row["created_at"],
+    updated_at: row["updated_at"],
   };
 }
 
-
-
-
-function refresh_vehicle(db: PGClient, cache: RedisClient, domain: string) {
-  log.info("refresh_vehicle");
-  return new Promise<void>((resolve, reject) => {
-    db.query("SELECT distinct on (d.vid, d.pid) d.id, v.id AS v_id, v.user_id AS v_user_id, v.owner AS v_owner, v.owner_type AS v_owner_type , v.vehicle_code AS v_vehicle_code, v.license_no AS v_license_no,  v.engine_no AS v_engine_no, v.register_date AS v_register_date, v.average_mileage AS v_average_mileage, v.is_transfer AS v_is_transfer, v.receipt_no AS v_receipt_no, v.receipt_date AS v_receipt_data, v.last_insurance_company AS v_last_insurance_company, v.insurance_due_date AS v_insurance_due_date, v.driving_frontal_view AS v_driving_frontal_view, v.driving_rear_view AS v_driving_rear_view, v.created_at AS v_created_at, v.updated_at AS v_updated_at, v.recommend AS v_recommend, v.fuel_type AS v_fuel_type, m.vehicle_code AS m_vehicle_code, v.vin AS m_vin_code, m.vehicle_name AS m_vehicle_name, m.brand_name AS m_brand_name, m.family_name AS m_family_name, m.body_type AS m_body_type,  m.engine_desc AS m_engine_desc, m.gearbox_name AS m_gearbox_name, m.year_pattern AS m_year_pattern, m.group_name AS m_group_name, m.cfg_level AS m_cfg_level, m.purchase_price AS m_purchase_price, m.purchase_price_tax AS m_purchase_price_tax, m.seat AS m_seat, m.effluent_standard AS m_effluent_standard, m.pl AS m_pl, m.fuel_jet_type AS m_fuel_jet_type, m.driven_type AS m_driven_type,p.id AS p_id, p.name AS p_name, p.identity_no AS p_identity, p.phone AS p_phone, p.identity_frontal_view AS p_identity_frontal_view, p.identity_rear_view AS p_identity_rear_view, p.license_frontal_view AS p_license_frontal_view, p.license_rear_view AS p_license_rear_view FROM vehicles AS v INNER JOIN drivers AS d ON v.id = d.vid INNER JOIN vehicle_model AS m ON v.vehicle_code = m.vehicle_code INNER JOIN person AS p ON d.pid = p.id or v.owner = p.id ORDER BY d.vid, d.pid", [], (e: Error, result: QueryResult) => {
-      if (e) {
-        reject(e);
-        log.info("err : SELECT query error" + e);
-      } else {
-        const vehicles: Object = {};
-        for (const row of result.rows) {
-          if (vehicles.hasOwnProperty(row.v_id)) {
-            vehicles[row.v_id]["pids"].push(row.d_pid);
-          } else {
-            let r_date: string;
-            if (row.v_register_date) {
-              let register = new Date(row.v_register_date);
-              r_date = register.getFullYear() + "-" + (register.getMonth() + 1) + "-" + register.getDate();
-            }
-            const vehicle = {
-              id: row.v_id,
-              user_id: row.v_user_id,
-              owid: row.v_owner,
-              owner: {},
-              owner_type: row.v_owner_type,
-              vehicle_code: trim(row.v_vehicle_code),
-              license_no: trim(row.v_license_no),
-              engine_no: trim(row.v_engine_no),
-              register_date: r_date,
-              average_mileage: trim(row.v_average_mileage),
-              drivers: [],
-              pids: [row.d_pid],
-              vin_code: trim(row.m_vin_code),
-              vehicle_model: {
-                vehicleCode: trim(row.m_vehicle_code),
-                vin_code: trim(row.m_vin_code),
-                vehicleName: trim(row.m_vehicle_name),
-                brandName: trim(row.m_brand_name),
-                familyName: trim(row.m_family_name),
-                bodyType: trim(row.m_body_type),
-                engineDesc: trim(row.m_engine_desc),
-                gearboxName: trim(row.m_gearbox_name),
-                yearPattern: trim(row.m_year_pattern),
-                groupName: trim(row.m_group_name),
-                cfgLevel: trim(row.m_cfg_level),
-                purchasePrice: row.m_purchase_price,
-                purchasePriceTax: row.m_purchase_price_tax,
-                seat: row.m_seat,
-                effluentStandard: trim(row.m_effluent_standard),
-                pl: trim(row.m_pl),
-                fuelJetType: trim(row.m_fuel_jet_type),
-                drivenType: trim(row.m_driven_type)
-              },
-              is_transfer: row.v_is_transfer,
-              receipt_no: trim(row.v_receipt_no),
-              receipt_date: row.v_receipt_data,
-              last_insurance_company: trim(row.v_last_insurance_company),
-              insurance_due_date: row.v_insurance_due_date,
-              driving_frontal_view: trim(row.v_driving_frontal_view),
-              driving_real_view: trim(row.v_driving_real_view),
-              created_at: row.v_created_at,
-              updated_at: row.v_updated_at,
-              recommend: trim(row.v_recommend),
-              fuel_type: trim(row.v_fuel_type)
-            };
-            vehicles[row.v_id] = vehicle;
-          }
-        }
-        const vids = Object.keys(vehicles);
-        let vehicle_users: Object = {};
-        for (let vid of vids) {
-          if (vehicle_users.hasOwnProperty(vehicles[vid]["user_id"])) {
-            if (!vehicle_users[vehicles[vid]["user_id"]].some(v => v === vid)) {
-              vehicle_users[vehicles[vid]["user_id"]].push(vid);
-            }
-          } else {
-            vehicle_users[vehicles[vid]["user_id"]] = [vid];
-          }
-          for (let pid of vehicles[vid]["pids"]) {
-            if (pid !== null) {
-              for (let row of result.rows) {
-                if (pid === row.p_id) {
-                  vehicles[vid]["drivers"].push({
-                    id: row.p_id,
-                    name: trim(row.p_name),
-                    identity_no: trim(row.p_identity),
-                    phone: trim(row.phone),
-                    identity_front_view: trim(row.p_identity_front_view),
-                    identity_rear_view: trim(row.p_identity_rear_view),
-                    license_frontal_view: trim(row.p_license_frontal_view),
-                    license_rear_view: trim(row.p_license_rear_view)
-                  });
-                }
-              }
-            }
-          }
-        }
-        for (let vid of vids) {
-          if (vehicles[vid]["owid"] !== null) {
-            for (let row of result.rows) {
-              if (vehicles[vid]["owid"] === row.p_id) {
-                log.info(vehicles[vid]["owid"] + "---------" + row.p_id);
-                vehicles[vid]["owner"].id = row.p_id;
-                vehicles[vid]["owner"].name = trim(row.p_name);
-                vehicles[vid]["owner"].identity_no = trim(row.p_identity);
-                vehicles[vid]["owner"].phone = trim(row.p_phone);
-                vehicles[vid]["owner"].identity_front_view = trim(row.p_identity_front_view);
-                vehicles[vid]["owner"].identity_rear_view = trim(row.p_identity_rear_view);
-                vehicles[vid]["owner"].license_frontal_view = trim(row.p_license_frontal_view);
-                vehicles[vid]["owner"].license_rear_view = trim(row.p_license_rear_view);
-                break;
-              }
-            }
-          }
-        }
-        const multi = cache.multi();
-        for (const vid of Object.keys(vehicles)) {
-          const vehicle = vehicles[vid];
-          delete vehicle["pids"];
-          delete vehicle["owid"];
-          multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-          multi.lpush("vehicle", vid);
-          // multi.hset("vehicle-vin-codes", vehicle["vehicle_model"]["vin_code"], vehicle["vehicle_model"]["vin_code"]);
-          multi.hset("vehicle-model-entities", vehicle["vehicle_model"]["vin_code"], JSON.stringify(vehicle["vehicle_model"]));
-          multi.sadd("vehicle-model", vehicle["vehicle_model"]["vin_code"]);
-        }
-        for (const key of Object.keys(vehicle_users)) {
-          multi.lpush("vehicle-" + key, vehicle_users[key]);
-        }
-        multi.exec((err: Error, _: any[]) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      }
-    });
-  });
+function row2person(row: Object) {
+  return {
+    id: row["pid"] ? row["pid"].trim() : "",
+    name: row["name"] ? row["name"].trim() : "",
+    identity_no: row["identity_no"] ? row["identity_no"].trim() : "",
+    phone: row["phone"] ? row["phone"].trim() : "",
+    identity_front_view: row["identity_front_view"] ? row["identity_front_view"].trim() : "",
+    identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
+    license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
+    license_rear_view: row["license_rear_view"] ? row["license_rear_view"].trim() : "",
+  }
 }
 
-
-processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction, domain: string) => {
-  log.info("refresh");
-  const pdo = refresh_vehicle(db, cache, domain);
-  let ps = [pdo];
-  async_serial_ignore<void>(ps, [], () => {
-    log.info("refresh done!");
-    done();
-  });
-});
+function row2driver(row: Object) {
+  return {
+    id: row["pid"] ? row["pid"].trim() : "",
+    name: row["name"] ? row["name"].trim() : "",
+    identity_no: row["identity_no"] ? row["identity_no"].trim() : "",
+    phone: row["phone"] ? row["phone"].trim() : "",
+    identity_front_view: row["identity_front_view"] ? row["identity_front_view"].trim() : "",
+    identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
+    license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
+    license_rear_view: row["license_rear_view"] ? row["license_rear_view"].trim() : "",
+    is_primary: row["is_primary"],
+    created_at: row["created_at"],
+    updated_at: row["updated_at"],
+  }
+}
 
 function trim(str: string) {
   if (str) {
@@ -718,6 +535,72 @@ function trim(str: string) {
     return null;
   }
 }
+
+processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction, callback: string) => {
+  log.info("refresh " + callback);
+  (async () => {
+    try {
+      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model, vehicles WHERE vehicles.vehicle_code = vehicle_model.vehicle_code", []);
+      const dbVehicle = await db.query("SELECT v.id AS id, user_id, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner")
+      const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
+      let vehicle_models = dbVehicleModel.rows;
+      let vehicles = dbVehicle.rows;
+      let drivers = dbDriver.rows;
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      let vehicleJsons = [];
+      for (let vehicle of vehicles) {
+        for (let vehicleModel of vehicle_models) {
+          let vin = trim(vehicleModel["vin"]);
+          if (trim(vehicle["vin"]) === vin) {
+            let vehicleCode = trim(vehicleModel["vehicle_code"]);
+            let vehicleModelJson = row2model(vehicleModel);
+            let vehicleJson = row2vehicle(vehicle);
+            let vid = trim(vehicle["id"]);
+            let vehicleCodeJson = [];
+            vehicleJson["vehicle_model"] = vehicleModelJson;
+            vehicleJson["owner"] = row2person(vehicle);
+            vehicleJson["drivers"] = [];
+            vehicleJsons.push(vehicleJson);
+            vehicleCodeJson.push(vehicleCode)
+            multi.lpush("vehicle", vid);
+            multi.sadd("vehicle-model", vin);
+            multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
+            multi.hset("vehicle-model-entities", vehicleCode, JSON.stringify(vehicleModelJson));
+          }
+        }
+      }
+      let vehicleUsers: Object = {};
+      for (let vehicle of vehicleJsons) {
+        if (vehicleUsers.hasOwnProperty(vehicle["user_id"])) {
+          if (!vehicleUsers[vehicle["user_id"]].some(v => v === vehicle["id"])) {
+            vehicleUsers[vehicle["user_id"]].push(vehicle["id"]);
+          }
+        } else {
+          vehicleUsers[vehicle["user_id"]] = [vehicle["id"]];
+        }
+        for (let driver of drivers) {
+          let vid = trim(vehicle["id"]);
+          let dvid = trim(driver["vid"]);
+          if (vid === dvid) {
+            vehicle["drivers"].push(row2driver(driver));
+            multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+          }
+        }
+      }
+      for (const key of Object.keys(vehicleUsers)) {
+        multi.lpush("vehicle-" + key, vehicleUsers[key]);
+      }
+      await multi.execAsync();
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: "refresh success" }));
+      done();
+      log.info("refresh success");
+    } catch (e) {
+      log.error(e);
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
+});
 
 // 出险次数
 processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {

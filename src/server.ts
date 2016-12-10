@@ -123,7 +123,7 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
     if (err) {
       rep({ code: 500, msg: err });
     } else if (result) {
-      log.info("result==========" + result);
+      log.info("result:" + result);
       rep({ code: 200, data: JSON.parse(result) });
     } else {
       rep({ code: 404, msg: "not found" });
@@ -249,7 +249,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
 // 添加驾驶员信息
 svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
   for (let driver of drivers) {
-    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), stringVerifier("phone", driver["phone"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
+    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
       log.info(errors);
       rep({
         code: 400,
@@ -267,8 +267,9 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
 });
 
 // vehicle_model
-svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunction, vin: string) => {
-  log.info("getVehicleModelsByMake vin: " + vin + "uid is " + ctx.uid);
+svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunction, vin_code: string) => {
+  log.info("getVehicleModelsByMake vin: " + vin_code + "uid is " + ctx.uid);
+  let vin = vin_code.toUpperCase();
   if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
@@ -284,7 +285,6 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
         msg: err
       });
     } else if (result) {
-      // log.info("result---------" + JSON.stringify(result));
       let multi = ctx.cache.multi();
       for (let code of JSON.parse(result)) {
         multi.hget("vehicle-model-entities", code);
@@ -334,8 +334,9 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
           let arg = JSON.parse(chunk.toString());
           let args = arg.result;
           if (args) {
-            ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-            rep({ code: 200, data: args.vehicleList });
+            let callback = uuid.v1();
+            ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin, callback] }));
+            wait_for_response(ctx.cache, callback, rep);
           } else {
             rep({
               code: 404,
@@ -356,90 +357,6 @@ svr.call("getVehicleModelsByMake", permissions, (ctx: Context, rep: ResponseFunc
       req.write(data);
       req.end();
     }
-    // if (err) {
-    //   rep({
-    //     code: 500,
-    //     msg: err
-    //   });
-    // } else {
-    //   if (result === null) {
-    //     let data = JSON.stringify({
-    //       "channelType": "00",
-    //       "requestCode": "100103",
-    //       "operatorCode": "dev@fengchaohuzhu.com",
-    //       "data": {
-    //         "vinCode": vin
-    //       },
-    //       "dtype": "json",
-    //       "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
-    //     });
-    //     let options = {
-    //       // hostname:"www.baidu.coddm",
-    //       hostname: "www.jy-epc.com",
-    //       port: 80,
-    //       path: "/api-show/NqAfterMarketDataServlet",
-    //       method: "POST",
-    //       headers: {
-    //         "Content-Type": "application/x-json",
-    //         "Content-Length": data.length
-    //       }
-    //     };
-
-    //     let req = http.request(options, (res) => {
-    //       console.log(`STATUS: ${res.statusCode}`);
-    //       console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
-    //       res.setEncoding("utf8");
-    //       res.on("data", (chunk) => {
-    //         let arg = JSON.parse(chunk);
-    //         let args = arg.result;
-    //         if (args) {
-    //           ctx.msgqueue.send(msgpack.encode({ cmd: "getVehicleModelsByMake", args: [args, vin] }));
-    //           rep({ code: 200, data: args.vehicleList });
-    //         } else {
-    //           rep({
-    //             code: 404,
-    //             msg: "b车型没找到"
-    //           });
-    //         }
-    //       });
-    //       res.on("end", () => {
-    //       });
-    //     });
-    //     req.on("error", (e) => {
-    //       rep({
-    //         code: 404,
-    //         msg: "c车型没找到"
-    //       });
-    //     });
-
-    //     req.write(data);
-    //     req.end();
-    //   } else {
-    //     ctx.cache.hget("vehicle-vin-codes", vin, (err, result) => {
-    //       if (result) {
-    //         let multi = ctx.cache.multi();
-    //         for (let code of JSON.parse(result)) {
-    //           multi.hget("vehicle-model-entities", code);
-    //         }
-    //         multi.exec((err, models) => {
-    //           if (models) {
-    //             rep({ code: 200, data: models.map(e => JSON.parse(e)) });
-    //           } else {
-    //             rep({
-    //               code: 404,
-    //               msg: "d车型没找到"
-    //             });
-    //           }
-    //         });
-    //       } else {
-    //         rep({
-    //           code: 404,
-    //           msg: "e车型没找到"
-    //         });
-    //       }
-    //     });
-    //   }
-    // }
   });
 });
 
@@ -454,15 +371,6 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
   })) {
     return;
   }
-  // let vid = "f4653191-87e2-11e6-8909-efcc5d8da517";
-  // let driving_frontal_view = "http://pic.58pic.com/58pic/13/19/86/55m58PICf9t_1024.jpg";
-  // let driving_rear_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car2.jpg";
-  // let identity_frontal_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg";
-  // let identity_rear_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car2.jpg";
-  // let license_frontal_views = {
-  //   "f4653190-87e2-11e6-8909-efcc5d8da517": "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg",
-  //   "f4653190-87e2-11e6-8909-efcc5d8da516": "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg",
-  // };
   log.info("license_frontal_views:" + license_frontal_views);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
@@ -501,8 +409,9 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
         multi.hget(vehicle_entities, id);
       }
       multi.exec((err2, result2) => {
-        if (result2) {
-          rep({ code: 200, data: result2.map(e => JSON.parse(e)) });
+        let vehicleFilter = result2.filter(e => e !== null)
+        if (vehicleFilter.length !== 0) {
+          rep({ code: 200, data: vehicleFilter.map(e => JSON.parse(e)) });
         } else if (err2) {
           log.info(err2);
           rep({ code: 500, msg: err2 });
@@ -533,15 +442,13 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: Respon
 
 svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("refresh");
-  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: [ctx.domain] }));
-  rep({
-    code: 200,
-    msg: "Okay"
-  });
+  let callback = uuid.v1();
+  log.info(callback);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: [callback] }));
+  wait_for_response(ctx.cache, callback, rep);
 });
 
 // 提交出险次数 damageCount
-
 svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: string, count: number) => {
   log.info("damageCount " + vid + " count " + count);
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
