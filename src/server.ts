@@ -123,7 +123,7 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
     if (err) {
       rep({ code: 500, msg: err });
     } else if (result) {
-      log.info("result==========" + result);
+      log.info("result:" + result);
       rep({ code: 200, data: JSON.parse(result) });
     } else {
       rep({ code: 404, msg: "not found" });
@@ -371,15 +371,6 @@ svr.call("uploadDriverImages", permissions, (ctx: Context, rep: ResponseFunction
   })) {
     return;
   }
-  // let vid = "f4653191-87e2-11e6-8909-efcc5d8da517";
-  // let driving_frontal_view = "http://pic.58pic.com/58pic/13/19/86/55m58PICf9t_1024.jpg";
-  // let driving_rear_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car2.jpg";
-  // let identity_frontal_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg";
-  // let identity_rear_view = "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car2.jpg";
-  // let license_frontal_views = {
-  //   "f4653190-87e2-11e6-8909-efcc5d8da517": "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg",
-  //   "f4653190-87e2-11e6-8909-efcc5d8da516": "http://hive-data.oss-cn-beijing.aliyuncs.com/user/car1.jpg",
-  // };
   log.info("license_frontal_views:" + license_frontal_views);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
@@ -418,8 +409,9 @@ svr.call("getUserVehicles", permissions, (ctx: Context, rep: ResponseFunction) =
         multi.hget(vehicle_entities, id);
       }
       multi.exec((err2, result2) => {
-        if (result2) {
-          rep({ code: 200, data: result2.map(e => JSON.parse(e)) });
+        let vehicleFilter = result2.filter(e => e !== null)
+        if (vehicleFilter.length !== 0) {
+          rep({ code: 200, data: vehicleFilter.map(e => JSON.parse(e)) });
         } else if (err2) {
           log.info(err2);
           rep({ code: 500, msg: err2 });
@@ -450,15 +442,13 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: Respon
 
 svr.call("refresh", permissions, (ctx: Context, rep: ResponseFunction) => {
   log.info("refresh");
-  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: [ctx.domain] }));
-  rep({
-    code: 200,
-    msg: "Okay"
-  });
+  let callback = uuid.v1();
+  log.info(callback);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "refresh", args: [callback] }));
+  wait_for_response(ctx.cache, callback, rep);
 });
 
 // 提交出险次数 damageCount
-
 svr.call("damageCount", permissions, (ctx: Context, rep: ResponseFunction, vid: string, count: number) => {
   log.info("damageCount " + vid + " count " + count);
   if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
