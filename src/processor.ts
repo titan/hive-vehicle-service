@@ -15,6 +15,8 @@ declare module "redis" {
     hsetAsync(key: string, field: string, field2: string): Promise<any>;
     hincrbyAsync(key: string, field: string, value: number): Promise<any>;
     setexAsync(key: string, ttl: number, value: string): Promise<any>;
+    lpushAsync(key: string, field: string): Promise<any>;
+    lrangeAsync(key: string, field: number, field2: number): Promise<any>;
   }
   export interface Multi extends NodeJS.EventEmitter {
     execAsync(): Promise<any>;
@@ -66,18 +68,18 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
       let owner = {};
       await db.query("BEGIN");
       const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
-      log.info("old person: " + JSON.stringify(person.rows));
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
+        log.info("old perosn: " + pid);
         owner = {
           id: pid,
-          name: person.rows[0]["name"],
-          identity_no: person.rows[0]["identity_no"],
-          phone: person.rows[0]["phone"]
+          name: trim(person.rows[0]["name"]),
+          identity_no: trim(person.rows[0]["identity_no"]),
+          phone: trim(person.rows[0]["phone"])
         };
       } else {
         pid = uuid.v1();
-        log.info("new perosn" + pid);
+        log.info("new perosn: " + pid);
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
         owner = {
           id: pid,
@@ -86,12 +88,22 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
           phone: phone
         };
       }
-      let vids = await db.query("SELECT id FROM vehicles WHERE vin = $1", [vin]);
+      const vids = await db.query("SELECT id FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
       let vid = "";
       if (vids["rowCount"] !== 0) {
-        log.info("old vehicle id" + JSON.stringify(vids.rows));
         vid = vids.rows[0]["id"];
-        // await db.query("UPDATE vehicles SET ")
+        log.info("old vehicle id: " + vid);
+        await db.query("UPDATE vehicles SET owner = $1, user_id = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
+        const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+        let vehicle = JSON.parse(vehicleJson);
+        vehicle["owner"] = owner;
+        vehicle["user_id"] = uid;
+        const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
+        if (!userVids.some(id => id === vid)) {
+          await cache.lpushAsync("vehicle-" + uid, vid);
+        }
+        await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
@@ -118,7 +130,6 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
         multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-        log.info("vid ==> " + vid);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
@@ -144,31 +155,41 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       let owner = {};
       await db.query("BEGIN");
       const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
-      log.info("old person: " + JSON.stringify(person.rows));
       if (person["rowCoun"] !== 0) {
         pid = person.rows[0]["id"];
+        log.info("old person: " + pid);
         owner = {
           id: pid,
-          name: person.rows[0]["name"],
-          identity_no: person.rows[0]["identity_no"],
-          phone: person.rows[0]["phone"]
+          name: trim(person.rows[0]["name"]),
+          identity_no: trim(person.rows[0]["identity_no"]),
+          phone: trim(person.rows[0]["phone"])
         };
       } else {
         pid = uuid.v1();
+        log.info("new perosn: " + pid);
         owner = {
           id: pid,
           name: name,
           identity_no: identity_no,
           phone: phone
         };
-        log.info("new perosn" + pid);
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
-      let vids = await db.query("SELECT id FROM vehicles WHERE vin = $1", [vin]);
+      const vids = await db.query("SELECT id FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
       let vid = "";
       if (vids["rowCount"] !== 0) {
-        log.info("old vehicle id" + JSON.stringify(vids.rows));
         vid = vids.rows[0]["id"];
+        log.info("old vehicle id: " + vid);
+        await db.query("UPDATE vehicles SET owner = $1, user_id = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
+        const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+        let vehicle = JSON.parse(vehicleJson);
+        vehicle["owner"] = owner;
+        vehicle["user_id"] = uid;
+        const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
+        if (!userVids.some(id => id === vid)) {
+          await cache.lpushAsync("vehicle-" + uid, vid);
+        }
+        await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
@@ -195,7 +216,6 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
         multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-        log.info("vid ==>" + vid);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
@@ -242,9 +262,9 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
             await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
             vehicle["drivers"].push({
               id: pid,
-              name: person.rows[0]["name"],
-              identity_no: person.rows[0]["identity_no"],
-              phone: person.rows[0]["phone"],
+              name: trim(person.rows[0]["name"]),
+              identity_no: trim(person.rows[0]["identity_no"]),
+              phone: trim(person.rows[0]["phone"]),
               is_primary: driver["is_primary"]
             });
           }
@@ -268,7 +288,7 @@ processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunctio
       }
       await db.query("COMMIT");
       await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
-      log.info("pids========== " + pids);
+      log.info("pids ==> " + pids);
       await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: pids }));
       done();
     } catch (e) {
@@ -438,7 +458,7 @@ processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done
       multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
       multi.sadd("vehicle-model", vin);
       await multi.execAsync();
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: args2.vehicleList}));
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: args2.vehicleList }));
       done();
       log.info("getVehicleModelsByMake success");
     } catch (e) {
