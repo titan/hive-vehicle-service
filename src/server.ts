@@ -162,8 +162,8 @@ svr.call("getVehicles", permissions, (ctx: Context, rep: ResponseFunction, start
 });
 
 // 获取驾驶人信息
-svr.call("getDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
-  log.info("getDrivers " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
+svr.call("getDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, pid: string) => {
+  log.info("getDriver " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
   if (!verify([uuidVerifier("vid", vid), uuidVerifier("pid", pid)], (errors: string[]) => {
     rep({
       code: 400,
@@ -246,7 +246,7 @@ svr.call("setVehicle", permissions, (ctx: Context, rep: ResponseFunction, name: 
 });
 
 // 添加驾驶员信息
-svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
+svr.call("addDrivers", permissions, (ctx: Context, rep: ResponseFunction, vid: string, drivers: any[]) => {
   for (let driver of drivers) {
     if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
       log.info(errors);
@@ -260,8 +260,8 @@ svr.call("setDriver", permissions, (ctx: Context, rep: ResponseFunction, vid: st
   }
   let callback = uuid.v1();
   let args = [vid, drivers, callback];
-  log.info("setDriver " + args + "uid is " + ctx.uid);
-  ctx.msgqueue.send(msgpack.encode({ cmd: "setDriver", args: args }));
+  log.info("addDrivers " + args + "uid is " + ctx.uid);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "addDrivers", args: args }));
   wait_for_response(ctx.cache, callback, rep);
 });
 
@@ -1127,3 +1127,17 @@ svr.call("getCarInfoByLicense", permissions, (ctx: Context, rep: ResponseFunctio
 log.info("Start server at %s and connect to %s", config.svraddr, config.msgaddr);
 
 svr.run();
+
+// 添加驾驶员信息
+svr.call("addVehicleModels", permissions, (ctx: Context, rep: ResponseFunction, vin: string, vehicle_models: Object[]) => {
+  if(!vehicle_models) {
+    log.info("vehicle_models is null");
+    rep({code: 400, msg: "vehicle_models is null"});
+    return;
+  }
+  let callback = uuid.v1();
+  let args = [vin, vehicle_models, callback];
+  log.info("addVehicleModels " + args + "uid is " + ctx.uid);
+  ctx.msgqueue.send(msgpack.encode({ cmd: "addVehicleModels", args: args }));
+  wait_for_response(ctx.cache, callback, rep);
+});
