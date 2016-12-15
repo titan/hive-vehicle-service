@@ -709,7 +709,7 @@ processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: Done
       for (let model of vehicle_models) {
         let dbmodel = await db.query("SELECT * FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
         if (dbmodel["rowCount"] === 0) {
-          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicle_code"], model["vehicle_name"], model["brand_name"], model["family_name"], model["body_type"], model["engine_desc"], model["gearbox_name"], model["year_pattern"], model["group_name"], model["cfg_level"], model["purchase_price"], model["purchase_price_tax"], model["seat"], model["effluent_standard"], model["pl"], model["fuel_jet_type"], model["driven_type"]]);
+          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
         }
       }
       await db.query("COMMIT");
@@ -717,8 +717,8 @@ processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: Done
       let codes = [];
       for (let model of vehicle_models) {
         model["vin_code"] = vin;
-        multi.hset("vehicle-model-entities", model["vehicle_code"], JSON.stringify(model));
-        codes.push(model["vehicle_code"]);
+        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
+        codes.push(model["vehicleCode"]);
       }
       multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
       multi.sadd("vehicle-model", vin);
