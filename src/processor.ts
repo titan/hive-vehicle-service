@@ -93,11 +93,11 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
       if (vids["rowCount"] !== 0) {
         vid = vids.rows[0]["id"];
         log.info("old vehicle id: " + vid);
-        await db.query("UPDATE vehicles SET owner = $1, user_id = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
+        await db.query("UPDATE vehicles SET owner = $1, uid = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
         const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
         let vehicle = JSON.parse(vehicleJson);
         vehicle["owner"] = owner;
-        vehicle["user_id"] = uid;
+        vehicle["uid"] = uid;
         const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
         if (!userVids.some(id => id === vid)) {
           await cache.lpushAsync("vehicle-" + uid, vid);
@@ -107,10 +107,10 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
-        await db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
+        await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
         let vehicle = {
           id: vid,
-          user_id: uid,
+          uid: uid,
           owner: owner,
           owner_type: 0,
           recommend: recommend,
@@ -180,11 +180,11 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       if (vids["rowCount"] !== 0) {
         vid = vids.rows[0]["id"];
         log.info("old vehicle id: " + vid);
-        await db.query("UPDATE vehicles SET owner = $1, user_id = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
+        await db.query("UPDATE vehicles SET owner = $1, uid = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
         const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
         let vehicle = JSON.parse(vehicleJson);
         vehicle["owner"] = owner;
-        vehicle["user_id"] = uid;
+        vehicle["uid"] = uid;
         const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
         if (!userVids.some(id => id === vid)) {
           await cache.lpushAsync("vehicle-" + uid, vid);
@@ -193,10 +193,10 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
-        await db.query("INSERT INTO vehicles (id, user_id, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
+        await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
         let vehicle = {
           id: vid,
-          user_id: uid,
+          uid: uid,
           owner: owner,
           owner_type: 0,
           recommend: recommend,
@@ -442,9 +442,9 @@ processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done
       await db.query("BEGIN");
       let models = args2.vehicleList.map(e => e);
       for (let model of models) {
-        let dbmodel = await db.query("SELECT * FROM vehicle_model WHERE vehicle_code = $1", [model["vehicleCode"]]);
+        let dbmodel = await db.query("SELECT * FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
         if (dbmodel["rowCount"] === 0) {
-          await db.query("INSERT INTO vehicle_model(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
+          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
         }
       }
       await db.query("COMMIT");
@@ -496,7 +496,7 @@ function row2model(row: Object) {
 function row2vehicle(row: Object) {
   return {
     id: row["id"] ? row["id"].trim() : "",
-    user_id: row["user_id"] ? row["user_id"].trim() : "",
+    uid: row["uid"] ? row["uid"].trim() : "",
     owner_type: row["owner_type"] ? row["owner_type"].trim() : "",
     vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
     license_no: row["license_no"] ? row["license_no"].trim() : "",
@@ -560,8 +560,8 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
   log.info("refresh " + callback);
   (async () => {
     try {
-      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_model, vehicles WHERE vehicles.vehicle_code = vehicle_model.vehicle_code", []);
-      const dbVehicle = await db.query("SELECT v.id AS id, user_id, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner")
+      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
+      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner")
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
@@ -591,12 +591,12 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
       }
       let vehicleUsers: Object = {};
       for (let vehicle of vehicleJsons) {
-        if (vehicleUsers.hasOwnProperty(vehicle["user_id"])) {
-          if (!vehicleUsers[vehicle["user_id"]].some(v => v === vehicle["id"])) {
-            vehicleUsers[vehicle["user_id"]].push(vehicle["id"]);
+        if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
+          if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
+            vehicleUsers[vehicle["uid"]].push(vehicle["id"]);
           }
         } else {
-          vehicleUsers[vehicle["user_id"]] = [vehicle["id"]];
+          vehicleUsers[vehicle["uid"]] = [vehicle["id"]];
         }
         for (let driver of drivers) {
           let vid = trim(vehicle["id"]);
