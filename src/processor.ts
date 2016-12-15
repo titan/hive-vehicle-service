@@ -241,8 +241,8 @@ interface InsertDriverCtx {
   done: DoneFunction;
 }
 
-processor.call("setDriver", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
-  log.info("setDriver " + vid);
+processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
+  log.info("addDrivers " + vid);
   (async () => {
     try {
       let pids = [];
@@ -396,7 +396,7 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
           } else {
             cache.setex(callback, 30, JSON.stringify({
               code: 200,
-              msg: "Success"
+              data: vid
             }), (err, result) => {
               done();
             });
@@ -701,3 +701,36 @@ log.info("Start processor at %s", config.addr);
 
 processor.run();
 
+processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: DoneFunction, vin: string, vehicle_models: Object[], callback: string) => {
+  log.info("addVehicleModels");
+  (async () => {
+    try {
+      await db.query("BEGIN");
+      for (let model of vehicle_models) {
+        let dbmodel = await db.query("SELECT * FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
+        if (dbmodel["rowCount"] === 0) {
+          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicle_code"], model["vehicle_name"], model["brand_name"], model["family_name"], model["body_type"], model["engine_desc"], model["gearbox_name"], model["year_pattern"], model["group_name"], model["cfg_level"], model["purchase_price"], model["purchase_price_tax"], model["seat"], model["effluent_standard"], model["pl"], model["fuel_jet_type"], model["driven_type"]]);
+        }
+      }
+      await db.query("COMMIT");
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      let codes = [];
+      for (let model of vehicle_models) {
+        model["vin_code"] = vin;
+        multi.hset("vehicle-model-entities", model["vehicle_code"], JSON.stringify(model));
+        codes.push(model["vehicle_code"]);
+      }
+      multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
+      multi.sadd("vehicle-model", vin);
+      await multi.execAsync();
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: codes }));
+      done();
+      log.info("addVehicleModels success");
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
+});
