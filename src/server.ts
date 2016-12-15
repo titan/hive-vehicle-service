@@ -123,7 +123,6 @@ svr.call("getVehicle", permissions, (ctx: Context, rep: ResponseFunction, vid: s
     if (err) {
       rep({ code: 500, msg: err });
     } else if (result) {
-      log.info("result:" + result);
       rep({ code: 200, data: JSON.parse(result) });
     } else {
       rep({ code: 404, msg: "not found" });
