@@ -396,7 +396,7 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
           } else {
             cache.setex(callback, 30, JSON.stringify({
               code: 200,
-              msg: "Success"
+              data: vid
             }), (err, result) => {
               done();
             });
