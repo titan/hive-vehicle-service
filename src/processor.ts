@@ -332,16 +332,6 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
       }
     });
   });
-  let pcommit = new Promise<void>((resolve, reject) => {
-    db.query("COMMIT", [], (err: Error) => {
-      if (err) {
-        log.info(err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
   let ps = [pbegin, pvehicles, pperson];
   for (let key in license_frontal_views) {
     if (license_frontal_views.hasOwnProperty(key)) {
@@ -358,6 +348,16 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
       ps.push(p);
     }
   }
+  let pcommit = new Promise<void>((resolve, reject) => {
+    db.query("COMMIT", [], (err: Error) => {
+      if (err) {
+        log.info(err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
   ps.push(pcommit);
 
   async_serial<void>(ps, [], () => {
