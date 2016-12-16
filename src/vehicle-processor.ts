@@ -1,18 +1,15 @@
-import { Processor, Config, ModuleFunction, DoneFunction, rpc, async_serial, async_serial_ignore } from "hive-processor";
+import { Processor, ProcessorFunction, ProcessorContext, rpc, set_for_response, msgpack_decode, msgpack_encode } from "hive-service";
 import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
-import * as bunyan from "bunyan";
-import { servermap, triggermap } from "hive-hostmap";
 import * as uuid from "node-uuid";
-import * as msgpack from "msgpack-lite";
-import * as nanomsg from "nanomsg";
 import * as http from "http";
 import * as bluebird from "bluebird";
+import * as bunyan from "bunyan";
 
 declare module "redis" {
   export interface RedisClient extends NodeJS.EventEmitter {
     hgetAsync(key: string, field: string): Promise<any>;
-    hsetAsync(key: string, field: string, field2: string): Promise<any>;
+    hsetAsync(key: string, field: string, field2: any): Promise<any>;
     hincrbyAsync(key: string, field: string, value: number): Promise<any>;
     setexAsync(key: string, ttl: number, value: string): Promise<any>;
     lpushAsync(key: string, field: string): Promise<any>;
@@ -22,7 +19,6 @@ declare module "redis" {
     execAsync(): Promise<any>;
   }
 }
-
 
 let log = bunyan.createLogger({
   name: "vehicle-processor",
@@ -44,41 +40,32 @@ let log = bunyan.createLogger({
   ]
 });
 
-let config: Config = {
-  dbhost: process.env["DB_HOST"],
-  dbuser: process.env["DB_USER"],
-  dbport: process.env["DB_PORT"],
-  database: process.env["DB_NAME"],
-  dbpasswd: process.env["DB_PASSWORD"],
-  cachehost: process.env["CACHE_HOST"],
-  addr: "ipc:///tmp/vehicle.ipc"
-};
+export const processor = new Processor();
 
-let processor = new Processor(config);
-let vehicle_trigger = nanomsg.socket("pub");
-vehicle_trigger.bind(triggermap.vehicle);
+// interface InsertDriverCtx {
+//   pids: any;
+//   dids: any;
+//   vid: string;
+//   cache: RedisClient;
+//   db: PGClient;
+//   done: DoneFunction;
+// }
 
-interface InsertDriverCtx {
-  pids: any;
-  dids: any;
-  vid: string;
-  cache: RedisClient;
-  db: PGClient;
-  done: DoneFunction;
-}
-
-interface InsertModelCtx {
-  cache: RedisClient;
-  db: PGClient;
-  done: DoneFunction;
-  vin: string;
-  models: Object[];
-};
+// interface InsertModelCtx {
+//   cache: RedisClient;
+//   db: PGClient;
+//   done: DoneFunction;
+//   vin: string;
+//   models: Object[];
+// };
 
 // 新车已上牌个人
-processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
+processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
   register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string, callback: string) => {
   log.info("setVehicleOnCard");
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       let pid = "";
@@ -119,7 +106,8 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
         if (!userVids.some(id => id === vid)) {
           await cache.lpushAsync("vehicle-" + uid, vid);
         }
-        await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+        const pkt = await msgpack_encode(vehicle);
+        await cache.hsetAsync("vehicle-entities", vid, pkt);
 
       } else {
         vid = uuid.v1();
@@ -146,26 +134,34 @@ processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: Done
         const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-        multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        const pkt = await msgpack_encode(vehicle);
+        multi.hset("vehicle-entities", vid, pkt);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
       }
       await db.query("COMMIT");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
+      await set_for_response(cache, callback, { code: 200, data: vid });
       done();
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
 // 新车未上牌个人
-processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFunction, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string, callback: string) => {
+processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string, callback: string) => {
   log.info("setVehicle");
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       let pid = "";
@@ -206,7 +202,8 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
         if (!userVids.some(id => id === vid)) {
           await cache.lpushAsync("vehicle-" + uid, vid);
         }
-        await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+        const pkt = await msgpack_encode(vehicle)
+        await cache.hsetAsync("vehicle-entities", vid, pkt);
       } else {
         vid = uuid.v1();
         log.info("new vehicle id: " + vid);
@@ -232,25 +229,33 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
         const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
         vehicle["vehicle_model"] = JSON.parse(vehicle_model_json);
         let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-        multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+        const pkt = await msgpack_encode(vehicle);
+        multi.hset("vehicle-entities", vid, pkt);
         multi.lpush("vehicle-" + uid, vid);
         multi.lpush("vehicle", vid);
         await multi.execAsync();
       }
       await db.query("COMMIT");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
+      await set_for_response(cache, callback, { code: 200, data: vid });
       done();
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
-processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
+processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, callback: string) => {
   log.info("addDrivers " + vid);
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       let pids = [];
@@ -261,7 +266,6 @@ processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFuncti
         const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [driver["identity_no"]]);
         if (person["rowCount"] !== 0) {
           let pid = person.rows[0]["id"];
-          log.info("old person" + JSON.stringify(person));
           pids.push(pid);
           const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
           if (driverId["rowCount"] === 0) {
@@ -276,7 +280,6 @@ processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFuncti
               is_primary: driver["is_primary"]
             });
           }
-          log.info(JSON.stringify(vehicle));
         } else {
           let pid = uuid.v4();
           let did = uuid.v4();
@@ -291,25 +294,32 @@ processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFuncti
             phone: driver["phone"],
             is_primary: driver["is_primary"]
           });
-          log.info(JSON.stringify(vehicle));
         }
       }
       await db.query("COMMIT");
-      await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+      const pkt = await msgpack_encode(vehicle);
+      await cache.hsetAsync("vehicle-entities", vid, pkt);
       log.info("pids ==> " + pids);
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: pids }));
+      await set_for_response(cache, callback, { code: 200, data: pids });
       done();
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
-processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
+processor.call("uploadDriverImages", (ctx: ProcessorContext, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
   log.info("uploadDriverImages");
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       await db.query("BEGIN");
@@ -335,21 +345,28 @@ processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: Do
           }
         }
       }
-      await cache.hset("vehicle-entities", vid, JSON.stringify(vehicle));
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
-      await vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
+      const pkt = await msgpack_encode(vehicle);
+      await cache.hsetAsync("vehicle-entities", vid, pkt);
+      await set_for_response(cache, callback, { code: 200, data: vid });
       done();
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
-processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string, callback: string) => {
+processor.call("getVehicleModelsByMake", (ctx: ProcessorContext, args2: any, vin: string, callback: string) => {
   log.info("getVehicleModelsByMake " + vin);
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       await db.query("BEGIN");
@@ -365,20 +382,25 @@ processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done
       let codes = [];
       for (let model of models) {
         model["vin_code"] = vin;
-        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
+        const pkt = await msgpack_encode(model);
+        multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
         codes.push(model["vehicleCode"]);
       }
       multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
       multi.sadd("vehicle-model", vin);
       await multi.execAsync();
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: args2.vehicleList }));
+      await set_for_response(cache, callback, { code: 200, data: args2.vehicleList });
       done();
       log.info("getVehicleModelsByMake success");
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
@@ -469,8 +491,11 @@ function trim(str: string) {
   }
 }
 
-processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction, callback: string) => {
+processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
   log.info("refresh " + callback);
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
@@ -497,8 +522,9 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
             vehicleCodeJson.push(vehicleCode)
             multi.lpush("vehicle", vid);
             multi.sadd("vehicle-model", vin);
+            let pkt2 = await msgpack_encode(vehicleModelJson);
             multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
-            multi.hset("vehicle-model-entities", vehicleCode, JSON.stringify(vehicleModelJson));
+            multi.hset("vehicle-model-entities", vehicleCode, pkt2);
           }
         }
       }
@@ -516,7 +542,8 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
           let dvid = trim(driver["vid"]);
           if (vid === dvid) {
             vehicle["drivers"].push(row2driver(driver));
-            multi.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+            let pkt = await msgpack_encode(vehicle);
+            multi.hset("vehicle-entities", vid, pkt);
           }
         }
       }
@@ -524,40 +551,54 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
         multi.lpush("vehicle-" + key, vehicleUsers[key]);
       }
       await multi.execAsync();
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: "refresh success" }));
+      await set_for_response(cache, callback, { code: 200, data: "refresh success" });
       done();
       log.info("refresh success");
     } catch (e) {
       log.error(e);
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
 // 出险次数
-processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
+processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number, callback: string) => {
   log.info("damageCount ");
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       await db.query("UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid]);
       const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
       let vehicle = JSON.parse(vehicleJson);
       vehicle["accident_times"] = count;
-      await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: { vid: vid, accident_times: vehicle["accident_times"] } }));
-      await vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
+      let pkt = await msgpack_encode(vehicle);
+      await cache.hsetAsync("vehicle-entities", vid, pkt);
+      await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_times: vehicle["accident_times"] } });
       done();
     } catch (e) {
       log.error(e);
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
 
-processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: DoneFunction, vin: string, vehicle_models: Object[], callback: string) => {
+processor.call("addVehicleModels", (ctx: ProcessorContext, vin: string, vehicle_models: Object[], callback: string) => {
   log.info("addVehicleModels");
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   (async () => {
     try {
       await db.query("BEGIN");
@@ -572,24 +613,25 @@ processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: Done
       let codes = [];
       for (let model of vehicle_models) {
         model["vin_code"] = vin;
-        multi.hset("vehicle-model-entities", model["vehicleCode"], JSON.stringify(model));
+        let pkt = await msgpack_encode(model);
+        multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
         codes.push(model["vehicleCode"]);
       }
       multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
       multi.sadd("vehicle-model", vin);
       await multi.execAsync();
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: codes }));
+      await set_for_response(cache, callback, { code: 200, data: codes });
       done();
       log.info("addVehicleModels success");
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
-      done();
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
     }
   })();
 });
-
-log.info("Start processor at %s", config.addr);
-
-processor.run();
