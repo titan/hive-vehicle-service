@@ -1130,10 +1130,16 @@ svr.run();
 
 // 添加驾驶员信息
 svr.call("addVehicleModels", permissions, (ctx: Context, rep: ResponseFunction, vin: string, vehicle_models: Object[]) => {
-  if(!vehicle_models) {
-    log.info("vehicle_models is null");
-    rep({code: 400, msg: "vehicle_models is null"});
-    return;
+  for (let model of vehicle_models) {
+    if (!verify([stringVerifier("vehicleCode", model["vehicleCode"])], (errors: string[]) => {
+      log.info(errors);
+      rep({
+        code: 400,
+        msg: errors.join("\n")
+      });
+    })) {
+      return;
+    }
   }
   let callback = uuid.v1();
   let args = [vin, vehicle_models, callback];

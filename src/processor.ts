@@ -58,6 +58,23 @@ let processor = new Processor(config);
 let vehicle_trigger = nanomsg.socket("pub");
 vehicle_trigger.bind(triggermap.vehicle);
 
+interface InsertDriverCtx {
+  pids: any;
+  dids: any;
+  vid: string;
+  cache: RedisClient;
+  db: PGClient;
+  done: DoneFunction;
+}
+
+interface InsertModelCtx {
+  cache: RedisClient;
+  db: PGClient;
+  done: DoneFunction;
+  vin: string;
+  models: Object[];
+};
+
 // 新车已上牌个人
 processor.call("setVehicleOnCard", (db: PGClient, cache: RedisClient, done: DoneFunction, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
   register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string, callback: string) => {
@@ -232,15 +249,6 @@ processor.call("setVehicle", (db: PGClient, cache: RedisClient, done: DoneFuncti
   })();
 });
 
-interface InsertDriverCtx {
-  pids: any;
-  dids: any;
-  vid: string;
-  cache: RedisClient;
-  db: PGClient;
-  done: DoneFunction;
-}
-
 processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, drivers: any, callback: string) => {
   log.info("addDrivers " + vid);
   (async () => {
@@ -302,138 +310,43 @@ processor.call("addDrivers", (db: PGClient, cache: RedisClient, done: DoneFuncti
 
 processor.call("uploadDriverImages", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
   log.info("uploadDriverImages");
-  let pbegin = new Promise<void>((resolve, reject) => {
-    db.query("BEGIN", [], (err: Error) => {
-      if (err) {
-        log.error(err);
-        reject(err);
-      } else {
-        resolve();
+  (async () => {
+    try {
+      await db.query("BEGIN");
+      await db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid]);
+      await db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid]);
+      for (let key in license_frontal_views) {
+        if (license_frontal_views.hasOwnProperty(key)) {
+          await db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key]);
+        }
       }
-    });
-  });
-  let pvehicles = new Promise<void>((resolve, reject) => {
-    db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid], (err: Error) => {
-      if (err) {
-        log.error(err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-  let pperson = new Promise<void>((resolve, reject) => {
-    db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid], (err: Error) => {
-      if (err) {
-        log.error(err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-  let ps = [pbegin, pvehicles, pperson];
-  for (let key in license_frontal_views) {
-    if (license_frontal_views.hasOwnProperty(key)) {
-      let p = new Promise<void>((resolve, reject) => {
-        db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key], (err: Error) => {
-          if (err) {
-            log.error(err);
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      });
-      ps.push(p);
-    }
-  }
-  let pcommit = new Promise<void>((resolve, reject) => {
-    db.query("COMMIT", [], (err: Error) => {
-      if (err) {
-        log.info(err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-  ps.push(pcommit);
-
-  async_serial<void>(ps, [], () => {
-    cache.hget("vehicle-entities", vid, (err, vehiclejson) => {
-      if (err) {
-        log.error(err);
-        cache.setex(callback, 30, JSON.stringify({
-          code: 500,
-          msg: err.message
-        }), (err, result) => {
-          done();
-        });
-      } else if (vehiclejson) {
-        const vehicle = JSON.parse(vehiclejson);
-        vehicle["driving_frontal_view"] = driving_frontal_view;
-        vehicle["driving_rear_view"] = driving_rear_view;
-        vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
-        vehicle["owner"]["identity_rear_view"] = identity_rear_view;
-        vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
-        for (let key in license_frontal_views) {
-          for (let driver of vehicle["drivers"]) {
-            if (driver["id"] === key) {
-              driver["license_view"] = license_frontal_views[key];
-            }
+      await db.query("COMMIT");
+      const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+      let vehicle = JSON.parse(vehicleJson);
+      vehicle["driving_frontal_view"] = driving_frontal_view;
+      vehicle["driving_rear_view"] = driving_rear_view;
+      vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
+      vehicle["owner"]["identity_rear_view"] = identity_rear_view;
+      vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
+      for (let key in license_frontal_views) {
+        for (let driver of vehicle["drivers"]) {
+          if (driver["id"] === key) {
+            driver["license_view"] = license_frontal_views[key];
           }
         }
-        vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
-        cache.hset("vehicle-entities", vid, JSON.stringify(vehicle), (err1, reply) => {
-          if (err1) {
-            cache.setex(callback, 30, JSON.stringify({
-              code: 500,
-              msg: err1.message
-            }), (err, result) => {
-              done();
-            });
-          } else {
-            cache.setex(callback, 30, JSON.stringify({
-              code: 200,
-              data: vid
-            }), (err, result) => {
-              done();
-            });
-          }
-        });
-      } else {
-        cache.setex(callback, 30, JSON.stringify({
-          code: 404,
-          msg: "Vehicle not found"
-        }), (err, result) => {
-          done();
-        });
       }
-    });
-  }, (e: Error) => {
-    db.query("ROLLBACK", [], (err: Error) => {
-      if (err) {
-        log.error(err);
-      }
-      log.error(e, e.message);
-      cache.setex(callback, 30, JSON.stringify({
-        code: 500,
-        msg: e.message
-      }), (err, result) => {
-        done();
-      });
-    });
-  });
+      await cache.hset("vehicle-entities", vid, JSON.stringify(vehicle));
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: vid }));
+      await vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
+      done();
+    } catch (e) {
+      log.error(e);
+      await db.query("ROLLBACK");
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
 });
-
-interface InsertModelCtx {
-  cache: RedisClient;
-  db: PGClient;
-  done: DoneFunction;
-  vin: string;
-  models: Object[];
-};
 
 processor.call("getVehicleModelsByMake", (db: PGClient, cache: RedisClient, done: DoneFunction, args2: any, vin: string, callback: string) => {
   log.info("getVehicleModelsByMake " + vin);
@@ -625,81 +538,23 @@ processor.call("refresh", (db: PGClient, cache: RedisClient, done: DoneFunction,
 // 出险次数
 processor.call("damageCount", (db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, count: number, callback: string) => {
   log.info("damageCount ");
-  modifyVehicle(db, cache, done, vid, callback, "UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid], (vehicle) => {
-    vehicle["accident_times"] = count;
-    return vehicle;
-  });
+  (async () => {
+    try {
+      await db.query("UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid]);
+      const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+      let vehicle = JSON.parse(vehicleJson);
+      vehicle["accident_times"] = count;
+      await cache.hsetAsync("vehicle-entities", vid, JSON.stringify(vehicle));
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 200, data: { vid: vid, accident_times: vehicle["accident_times"] } }));
+      await vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
+      done();
+    } catch (e) {
+      log.error(e);
+      await cache.setexAsync(callback, 30, JSON.stringify({ code: 500, msg: e.message }));
+      done();
+    }
+  })();
 });
-function modifyVehicle(db: PGClient, cache: RedisClient, done: DoneFunction, vid: string, cbflag: string, sql: string, args: any[], cb: ((vehicle: Object) => Object)): void {
-  new Promise<void>((resolve, reject) => {
-    db.query(sql, args, (err: Error) => {
-      if (err) {
-        log.info(err);
-        reject(err);
-      } else {
-        resolve(null);
-      }
-    });
-  })
-    .then(() => {
-      return new Promise<Object>((resolve, reject) => {
-        log.info("redis " + vid);
-        cache.hget("vehicle-entities", vid, function (err, result) {
-          if (result) {
-            resolve(JSON.parse(result));
-          } else if (err) {
-            log.info(err);
-            reject(err);
-          } else {
-            resolve(null);
-          }
-        });
-      });
-    })
-    .then((vehicle: Object) => {
-      if (vehicle != null) {
-        let uw = cb(vehicle);
-        let multi = cache.multi();
-        multi.hset("vehicle-entities", vid, JSON.stringify(uw));
-        multi.setex(cbflag, 30, JSON.stringify({
-          code: 200,
-          data: { vid: vid, accident_times: vehicle["accident_times"] }
-        }));
-        multi.exec((err: Error, _) => {
-          if (err) {
-            log.error(err, "update vehicle cache error");
-            cache.setex(cbflag, 30, JSON.stringify({
-              code: 500,
-              msg: "update vehicle cache error"
-            }));
-          } else {
-            log.info("success");
-          }
-          vehicle_trigger.send(msgpack.encode({ vid, vehicle }));
-          done();
-        });
-      } else {
-        cache.setex(cbflag, 30, JSON.stringify({
-          code: 404,
-          msg: "Not found vehicle"
-        }));
-        log.info("Not found vehicle");
-        done();
-      }
-    })
-    .catch(error => {
-      cache.setex(cbflag, 30, JSON.stringify({
-        code: 500,
-        msg: error.message
-      }), (err, result) => {
-        done();
-      });
-      log.info("err" + error);
-    });
-}
-log.info("Start processor at %s", config.addr);
-
-processor.run();
 
 processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: DoneFunction, vin: string, vehicle_models: Object[], callback: string) => {
   log.info("addVehicleModels");
@@ -734,3 +589,7 @@ processor.call("addVehicleModels", (db: PGClient, cache: RedisClient, done: Done
     }
   })();
 });
+
+log.info("Start processor at %s", config.addr);
+
+processor.run();
