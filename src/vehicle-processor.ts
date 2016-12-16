@@ -202,7 +202,7 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
         if (!userVids.some(id => id === vid)) {
           await cache.lpushAsync("vehicle-" + uid, vid);
         }
-        const pkt = await msgpack_encode(vehicle)
+        const pkt = await msgpack_encode(vehicle);
         await cache.hsetAsync("vehicle-entities", vid, pkt);
       } else {
         vid = uuid.v1();
@@ -464,7 +464,7 @@ function row2person(row: Object) {
     identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
     license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
     license_rear_view: row["license_rear_view"] ? row["license_rear_view"].trim() : "",
-  }
+  };
 }
 
 function row2driver(row: Object) {
@@ -480,7 +480,7 @@ function row2driver(row: Object) {
     is_primary: row["is_primary"],
     created_at: row["created_at"],
     updated_at: row["updated_at"],
-  }
+  };
 }
 
 function trim(str: string) {
@@ -499,7 +499,7 @@ processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
   (async () => {
     try {
       const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
-      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner")
+      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner");
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
@@ -519,7 +519,7 @@ processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
             vehicleJson["owner"] = row2person(vehicle);
             vehicleJson["drivers"] = [];
             vehicleJsons.push(vehicleJson);
-            vehicleCodeJson.push(vehicleCode)
+            vehicleCodeJson.push(vehicleCode);
             multi.lpush("vehicle", vid);
             multi.sadd("vehicle-model", vin);
             let pkt2 = await msgpack_encode(vehicleModelJson);
