@@ -308,8 +308,9 @@ server.call("addDrivers", allowAll, "添加驾驶员信息", "添加驾驶员信
 });
 
 server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin_code: string) => {
-  log.info("getVehicleModelsByMake vin: " + vin_code + "uid is " + ctx.uid);
-  let vin = vin_code.toUpperCase();
+  log.info("getVehicleModelsByMake vin: " + vin_code + " uid is " + ctx.uid);
+  let vin = vin_code;
+  console.log(typeof(vin) + vin);
   if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
@@ -878,180 +879,180 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
   req.end(postData);
 });
 
-server.call("getModelsInfoByVehicleInfo", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), vehicleInfo: Object) => {
-  // log.info("licenseNumber: " + licenseNumber + "responseNumber: " + responseNumber);
-  // if (vehicleInfo["responseNo"] === undefined ||
-  //   vehicleInfo["licenseNo"] === undefined ||
-  //   vehicleInfo["frameNo"] === undefined) {
-  //   rep({
-  //     code: 400,
-  //     msg: "Wrong arguments!"
-  //   });
-  // }
+// server.call("getModelsInfoByVehicleInfo", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), vehicleInfo: Object) => {
+//   // log.info("licenseNumber: " + licenseNumber + "responseNumber: " + responseNumber);
+//   // if (vehicleInfo["responseNo"] === undefined ||
+//   //   vehicleInfo["licenseNo"] === undefined ||
+//   //   vehicleInfo["frameNo"] === undefined) {
+//   //   rep({
+//   //     code: 400,
+//   //     msg: "Wrong arguments!"
+//   //   });
+//   // }
 
-  log.info("Here: ");
-  log.info(JSON.stringify(vehicleInfo));
+//   log.info("Here: ");
+//   log.info(JSON.stringify(vehicleInfo));
 
-  if (!verify([stringVerifier("responseNo", vehicleInfo["responseNo"]),
-  stringVerifier("licenseNo", vehicleInfo["licenseNo"]),
-  stringVerifier("frameNo", vehicleInfo["frameNo"])
-  ], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
+//   if (!verify([stringVerifier("responseNo", vehicleInfo["responseNo"]),
+//   stringVerifier("licenseNo", vehicleInfo["licenseNo"]),
+//   stringVerifier("frameNo", vehicleInfo["frameNo"])
+//   ], (errors: string[]) => {
+//     log.info(errors);
+//     rep({
+//       code: 400,
+//       msg: errors.join("\n")
+//     });
+//   })) {
+//     return;
+//   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
-  log.info(sendTimeString);
+//   log.info(sendTimeString);
 
-  let data: Object = {
-    "operType": "JYK",
-    "msg": "",
-    "sendTime": sendTimeString,
-    "sign": "",
-    "data": {
-      "applicationID": "FENGCHAOHUZHU_SERVICE",
-      "responseNo": vehicleInfo["responseNo"],
-      "frameNo": vehicleInfo["frameNo"],
-      "licenseNo": vehicleInfo["licenseNo"]
-    }
-  };
+//   let data: Object = {
+//     "operType": "JYK",
+//     "msg": "",
+//     "sendTime": sendTimeString,
+//     "sign": "",
+//     "data": {
+//       "applicationID": "FENGCHAOHUZHU_SERVICE",
+//       "responseNo": vehicleInfo["responseNo"],
+//       "frameNo": vehicleInfo["frameNo"],
+//       "licenseNo": vehicleInfo["licenseNo"]
+//     }
+//   };
 
-  let postData: string = JSON.stringify(data);
+//   let postData: string = JSON.stringify(data);
 
-  log.info(postData);
+//   log.info(postData);
 
-  let options = {
-    hostname: "139.198.1.73",
-    port: 8081,
-    method: "POST",
-    path: "/zkyq-web/prerelease/ifmEntry",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(postData)
-    }
-  };
+//   let options = {
+//     hostname: "139.198.1.73",
+//     port: 8081,
+//     method: "POST",
+//     path: "/zkyq-web/prerelease/ifmEntry",
+//     headers: {
+//       "Content-Type": "application/json",
+//       "Content-Length": Buffer.byteLength(postData)
+//     }
+//   };
 
-  let req = http.request(options, function (res) {
-    log.info("Status: " + res.statusCode);
-    res.setEncoding("utf8");
+//   let req = http.request(options, function (res) {
+//     log.info("Status: " + res.statusCode);
+//     res.setEncoding("utf8");
 
-    let result: string = "";
+//     let result: string = "";
 
-    res.on("data", function (body) {
-      result += body;
-    });
+//     res.on("data", function (body) {
+//       result += body;
+//     });
 
-    res.on("end", function () {
-      log.info(result);
-      let retData: Object = JSON.parse(result);
-      if (retData["state"] === "1") {
-        rep({
-          code: 200,
-          data: retData["data"]
-        });
-      } else {
-        rep({
-          code: 400,
-          msg: retData["msg"]
-        });
-      }
+//     res.on("end", function () {
+//       log.info(result);
+//       let retData: Object = JSON.parse(result);
+//       if (retData["state"] === "1") {
+//         rep({
+//           code: 200,
+//           data: retData["data"]
+//         });
+//       } else {
+//         rep({
+//           code: 400,
+//           msg: retData["msg"]
+//         });
+//       }
 
-      req.on("error", (e) => {
-        log.info(`problem with request: ${e.message}`);
-        rep({
-          code: 500,
-          msg: e.message
-        });
-      });
-    });
-  });
+//       req.on("error", (e) => {
+//         log.info(`problem with request: ${e.message}`);
+//         rep({
+//           code: 500,
+//           msg: e.message
+//         });
+//       });
+//     });
+//   });
 
-  req.end(postData);
-});
+//   req.end(postData);
+// });
 
-server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
-  log.info("licenseNumber " + licenseNumber);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
+// server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
+//   log.info("licenseNumber " + licenseNumber);
+//   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
+//     log.info(errors);
+//     rep({
+//       code: 400,
+//       msg: errors.join("\n")
+//     });
+//   })) {
+//     return;
+//   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
-  let data: Object = {
-    "operType": "BDB",
-    "msg": "",
-    "sendTime": sendTimeString,
-    "sign": "",
-    "data": {
-      "licenseNo": licenseNumber,
-      "applicationID": "FENGCHAOHUZHU_SERVICE"
-    }
-  };
+//   let data: Object = {
+//     "operType": "BDB",
+//     "msg": "",
+//     "sendTime": sendTimeString,
+//     "sign": "",
+//     "data": {
+//       "licenseNo": licenseNumber,
+//       "applicationID": "FENGCHAOHUZHU_SERVICE"
+//     }
+//   };
 
-  let postData: string = JSON.stringify(data);
-  let options = {
-    hostname: "139.198.1.73",
-    port: 8081,
-    method: "POST",
-    path: "/zkyq-web/prerelease/ifmEntry",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(postData)
-    }
-  };
+//   let postData: string = JSON.stringify(data);
+//   let options = {
+//     hostname: "139.198.1.73",
+//     port: 8081,
+//     method: "POST",
+//     path: "/zkyq-web/prerelease/ifmEntry",
+//     headers: {
+//       "Content-Type": "application/json",
+//       "Content-Length": Buffer.byteLength(postData)
+//     }
+//   };
 
-  let req = http.request(options, function (res) {
-    log.info("Status: " + res.statusCode);
-    res.setEncoding("utf8");
+//   let req = http.request(options, function (res) {
+//     log.info("Status: " + res.statusCode);
+//     res.setEncoding("utf8");
 
-    let result: string = "";
+//     let result: string = "";
 
-    res.on("data", function (body) {
-      result += body;
-    });
+//     res.on("data", function (body) {
+//       result += body;
+//     });
 
-    res.on("end", function () {
-      let retData: Object = JSON.parse(result);
-      // log.info("Here: ");
-      // log.info(JSON.stringify(retData));
-      if (retData["state"] === "1") {
-        rep({
-          code: 200,
-          data: retData["data"]
-        });
-      } else {
-        rep({
-          code: 400,
-          msg: retData["msg"]
-        });
-      }
-    });
+//     res.on("end", function () {
+//       let retData: Object = JSON.parse(result);
+//       // log.info("Here: ");
+//       // log.info(JSON.stringify(retData));
+//       if (retData["state"] === "1") {
+//         rep({
+//           code: 200,
+//           data: retData["data"]
+//         });
+//       } else {
+//         rep({
+//           code: 400,
+//           msg: retData["msg"]
+//         });
+//       }
+//     });
 
-    req.on("error", (e) => {
-      log.info(`problem with request: ${e.message}`);
-      rep({
-        code: 500,
-        msg: e.message
-      });
-    });
-  });
+//     req.on("error", (e) => {
+//       log.info(`problem with request: ${e.message}`);
+//       rep({
+//         code: 500,
+//         msg: e.message
+//       });
+//     });
+//   });
 
-  req.end(postData);
-});
+//   req.end(postData);
+// });
 
-server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
+server.call("getVehicleByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
   log.info("licenseNumber " + licenseNumber);
   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
     log.info(errors);
@@ -1196,7 +1197,7 @@ server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "
   req.end(postData);
 });
 
-server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin: string, vehicle_models: Object[]) => {
+server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信息", (ctx: ServerContext, rep: ((result: any) => void), vehicle_models: Object[]) => {
   for (let model of vehicle_models) {
     if (!verify([stringVerifier("vehicleCode", model["vehicleCode"])], (errors: string[]) => {
       log.info(errors);
@@ -1209,7 +1210,7 @@ server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信
     }
   }
   let callback = uuid.v1();
-  let args = [vin, vehicle_models, callback];
+  let args = [vehicle_models, callback];
   log.info("addVehicleModels " + args + "uid is " + ctx.uid);
   const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
   ctx.publish(pkt);

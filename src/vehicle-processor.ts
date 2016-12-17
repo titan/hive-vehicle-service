@@ -438,7 +438,7 @@ function row2vehicle(row: Object) {
     engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
     register_date: row["register_date"],
     average_mileage: row["average_mileage"] ? row["average_mileage"].trim() : "",
-    is_transfer: row["is_transfer"] ? row["is_transfer"].trim() : "",
+    is_transfer: row["is_transfer"],
     receipt_no: row["receipt_no"] ? row["receipt_no"].trim() : "",
     receipt_date: row["receipt_date"],
     last_insurance_company: row["last_insurance_company"] ? row["last_insurance_company"].trim() : "",
@@ -447,7 +447,7 @@ function row2vehicle(row: Object) {
     driving_real_view: row["driving_real_view"] ? row["driving_real_view"].trim() : "",
     recommend: row["recommend"] ? row["recommend"].trim() : "",
     fuel_type: row["fuel_type"] ? row["fuel_type"].trim() : "",
-    accident_times: row["accident_times"],
+    accident_status: row["accident_status"],
     vin_code: row["vin"] ? row["vin"].trim() : "",
     created_at: row["created_at"],
     updated_at: row["updated_at"],
@@ -498,58 +498,59 @@ processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
   const done = ctx.done;
   (async () => {
     try {
-      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
-      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_times, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner");
-      const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
+      const dbVehicleModel = await db.query("SELECT vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models");
+      // const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
+      // const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_status, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner");
+      // const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
-      let vehicles = dbVehicle.rows;
-      let drivers = dbDriver.rows;
+      // let vehicles = dbVehicle.rows;
+      // let drivers = dbDriver.rows;
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
       let vehicleJsons = [];
-      for (let vehicle of vehicles) {
+      // for (let vehicle of vehicles) {
         for (let vehicleModel of vehicle_models) {
-          let vin = trim(vehicleModel["vin"]);
-          if (trim(vehicle["vin"]) === vin) {
+          // let vin = trim(vehicleModel["vin"]);
+          // if (trim(vehicle["vin"]) === vin) {
             let vehicleCode = trim(vehicleModel["vehicle_code"]);
             let vehicleModelJson = row2model(vehicleModel);
-            let vehicleJson = row2vehicle(vehicle);
-            let vid = trim(vehicle["id"]);
-            let vehicleCodeJson = [];
-            vehicleJson["vehicle_model"] = vehicleModelJson;
-            vehicleJson["owner"] = row2person(vehicle);
-            vehicleJson["drivers"] = [];
-            vehicleJsons.push(vehicleJson);
-            vehicleCodeJson.push(vehicleCode);
-            multi.lpush("vehicle", vid);
-            multi.sadd("vehicle-model", vin);
+            // let vehicleJson = row2vehicle(vehicle);
+            // let vid = trim(vehicle["id"]);
+            // let vehicleCodeJson = [];
+            // vehicleJson["vehicle_model"] = vehicleModelJson;
+            // vehicleJson["owner"] = row2person(vehicle);
+            // vehicleJson["drivers"] = [];
+            // vehicleJsons.push(vehicleJson);
+            // vehicleCodeJson.push(vehicleCode);
+            // multi.lpush("vehicle", vid);
+            // multi.sadd("vehicle-model", vin);
             let pkt2 = await msgpack_encode(vehicleModelJson);
-            multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
+            // multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
             multi.hset("vehicle-model-entities", vehicleCode, pkt2);
-          }
+          // }
         }
-      }
-      let vehicleUsers: Object = {};
-      for (let vehicle of vehicleJsons) {
-        if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
-          if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
-            vehicleUsers[vehicle["uid"]].push(vehicle["id"]);
-          }
-        } else {
-          vehicleUsers[vehicle["uid"]] = [vehicle["id"]];
-        }
-        for (let driver of drivers) {
-          let vid = trim(vehicle["id"]);
-          let dvid = trim(driver["vid"]);
-          if (vid === dvid) {
-            vehicle["drivers"].push(row2driver(driver));
-            let pkt = await msgpack_encode(vehicle);
-            multi.hset("vehicle-entities", vid, pkt);
-          }
-        }
-      }
-      for (const key of Object.keys(vehicleUsers)) {
-        multi.lpush("vehicle-" + key, vehicleUsers[key]);
-      }
+      // }
+      // let vehicleUsers: Object = {};
+      // for (let vehicle of vehicleJsons) {
+      //   if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
+      //     if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
+      //       vehicleUsers[vehicle["uid"]].push(vehicle["id"]);
+      //     }
+      //   } else {
+      //     vehicleUsers[vehicle["uid"]] = [vehicle["id"]];
+      //   }
+      //   for (let driver of drivers) {
+      //     let vid = trim(vehicle["id"]);
+      //     let dvid = trim(driver["vid"]);
+      //     if (vid === dvid) {
+      //       vehicle["drivers"].push(row2driver(driver));
+      //       let pkt = await msgpack_encode(vehicle);
+            // multi.hset("vehicle-entities", vid, pkt);
+          // }
+        // }
+      // }
+      // for (const key of Object.keys(vehicleUsers)) {
+        // multi.lpush("vehicle-" + key, vehicleUsers[key]);
+      // }
       await multi.execAsync();
       await set_for_response(cache, callback, { code: 200, data: "refresh success" });
       done();
@@ -574,13 +575,13 @@ processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number
   const done = ctx.done;
   (async () => {
     try {
-      await db.query("UPDATE vehicles SET accident_times = $1 WHERE id = $2 and deleted = false", [count, vid]);
+      await db.query("UPDATE vehicles SET accident_status = $1 WHERE id = $2 and deleted = false", [count, vid]);
       const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
       let vehicle = JSON.parse(vehicleJson);
-      vehicle["accident_times"] = count;
+      vehicle["accident_status"] = count;
       let pkt = await msgpack_encode(vehicle);
       await cache.hsetAsync("vehicle-entities", vid, pkt);
-      await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_times: vehicle["accident_times"] } });
+      await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_status: vehicle["accident_status"] } });
       done();
     } catch (e) {
       log.error(e);
@@ -594,7 +595,7 @@ processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number
   })();
 });
 
-processor.call("addVehicleModels", (ctx: ProcessorContext, vin: string, vehicle_models: Object[], callback: string) => {
+processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Object[], callback: string) => {
   log.info("addVehicleModels");
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -612,13 +613,9 @@ processor.call("addVehicleModels", (ctx: ProcessorContext, vin: string, vehicle_
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
       let codes = [];
       for (let model of vehicle_models) {
-        model["vin_code"] = vin;
         let pkt = await msgpack_encode(model);
         multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
-        codes.push(model["vehicleCode"]);
       }
-      multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
-      multi.sadd("vehicle-model", vin);
       await multi.execAsync();
       await set_for_response(cache, callback, { code: 200, data: codes });
       done();
