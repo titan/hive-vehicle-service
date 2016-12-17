@@ -797,7 +797,7 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     return;
   }
 
-  let provinceCode = provinces[provinceName];
+  const provinceCode = provinces[provinceName];
   if (provinceCode === undefined) {
     rep({
       code: 400,
@@ -805,9 +805,9 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     });
   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
+  const sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
-  let data: Object = {
+  const data: Object = {
     "operType": "QCC",
     "msg": "",
     "sendTime": sendTimeString,
@@ -818,8 +818,8 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     }
   };
 
-  let postData: string = JSON.stringify(data);
-  let options = {
+  const postData: string = JSON.stringify(data);
+  const options = {
     hostname: "139.198.1.73",
     port: 8081,
     method: "POST",
@@ -830,7 +830,7 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     }
   };
 
-  let req = http.request(options, function (res) {
+  const req = http.request(options, function (res) {
     log.info("Status: " + res.statusCode);
     res.setEncoding("utf8");
 
@@ -855,12 +855,12 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
           }
         }
         rep({
-          code: 200,
+          code: 404,
           msg: "Not Found!"
         });
       } else {
         rep({
-          code: 400,
+          code: 404,
           msg: "Not Found!"
         });
       }
@@ -1077,6 +1077,7 @@ server.call("getVehicleByLicense", allowAll, "根据车牌号查询车信息", "
   };
 
   let postData: string = JSON.stringify(data);
+
   let options = {
     hostname: "139.198.1.73",
     port: 8081,
