@@ -597,7 +597,7 @@ processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number
   })();
 });
 
-processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Object[], callback: string) => {
+processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Object[], cbflag: string, license?: string) => {
   log.info("addVehicleModels");
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -605,27 +605,31 @@ processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Objec
   (async () => {
     try {
       await db.query("BEGIN");
-      for (let model of vehicle_models) {
-        let dbmodel = await db.query("SELECT * FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
+      for (const model of vehicle_models) {
+        const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
         if (dbmodel["rowCount"] === 0) {
           await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
         }
       }
       await db.query("COMMIT");
-      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-      let codes = [];
-      for (let model of vehicle_models) {
-        let pkt = await msgpack_encode(model);
+      const multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      const codes = [];
+      for (const model of vehicle_models) {
+        const pkt = await msgpack_encode(model);
         multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
       }
       await multi.execAsync();
-      await set_for_response(cache, callback, { code: 200, data: codes });
+      if (license) {
+        const pkt = await msgpack_encode(vehicle_models);
+        await cache.hsetAsync("license-vehicle-models", license, pkt);
+      }
+      await set_for_response(cache, cbflag, { code: 200, data: vehicle_models });
       done();
       log.info("addVehicleModels success");
     } catch (e) {
       log.error(e);
       await db.query("ROLLBACK");
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+      set_for_response(cache, cbflag, { code: 500, msg: e.message }).then(_ => {
         done();
       }).catch(e => {
         log.error(e);
