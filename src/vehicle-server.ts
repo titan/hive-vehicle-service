@@ -698,7 +698,7 @@ function transVehicleModel(models) {
   return vehicleModels;
 }
 
-server.call("fetchVehicleModelByLicense", allowAll, "根据车牌号查询车型信息", "根据车牌号从智通引擎查询车型信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
+server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
   log.info(`fetchVehicleModelByLicense, licenseNumber: ${licenseNumber}`);
   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
     log.info(errors);
@@ -797,10 +797,16 @@ server.call("fetchVehicleModelByLicense", allowAll, "根据车牌号查询车型
                 const retData1: Object = JSON.parse(result);
                 if (retData1["state"] === "1") {
                   const vehicle_models = transVehicleModel(retData1["data"]);
+                  vehicleInfo["models"] = retData1["data"];
+                  vehicleInfo["std_models"] = vehicle_models;
                   const cbflag = uuid.v1();
-                  const args = [vehicle_models, cbflag, licenseNumber];
+                  const args = [vehicleInfo, cbflag];
                   const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
                   ctx.publish(pkt);
+
+                  msgpack_encode(vehicleInfo).then(buf => {
+                    ctx.cache.hset("vehicle-info", licenseNumber, buf);
+                  });
                   wait_for_response(ctx.cache, cbflag, rep);
                 } else {
                   rep({

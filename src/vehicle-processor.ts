@@ -597,14 +597,15 @@ processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number
   })();
 });
 
-processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Object[], cbflag: string, license?: string) => {
-  log.info("addVehicleModels");
+processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: Object, cbflag: string) => {
+  log.info(`addVehicleModels, vehicle_and_models: ${JSON.stringify(vehicle_and_models)}, cbflag: ${cbflag}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
   (async () => {
     try {
       await db.query("BEGIN");
+      const vehicle_models = vehicle_and_models["std_models"];
       for (const model of vehicle_models) {
         const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
         if (dbmodel["rowCount"] === 0) {
@@ -619,11 +620,10 @@ processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_models: Objec
         multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
       }
       await multi.execAsync();
-      if (license) {
-        const pkt = await msgpack_encode(vehicle_models);
-        await cache.hsetAsync("license-vehicle-models", license, pkt);
-      }
-      await set_for_response(cache, cbflag, { code: 200, data: vehicle_models });
+      const license = vehicle_and_models["licenseNo"];
+      const pkt = await msgpack_encode(vehicle_and_models);
+      await cache.hsetAsync("license-vehicle-models", license, pkt);
+      await set_for_response(cache, cbflag, { code: 200, data: vehicle_and_models });
       done();
       log.info("addVehicleModels success");
     } catch (e) {
