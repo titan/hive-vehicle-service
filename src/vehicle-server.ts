@@ -20,7 +20,7 @@ declare module "redis" {
 
 const allowAll: Permission[] = [["mobile", true], ["admin", true]];
 const mobileOnly: Permission[] = [["mobile", true], ["admin", false]];
-const adminOnly: Permission[] = [["mobile", false], ["admin", true]]
+const adminOnly: Permission[] = [["mobile", false], ["admin", true]];
 
 export const server = new Server();
 
@@ -308,8 +308,9 @@ server.call("addDrivers", allowAll, "添加驾驶员信息", "添加驾驶员信
 });
 
 server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin_code: string) => {
-  log.info("getVehicleModelsByMake vin: " + vin_code + "uid is " + ctx.uid);
-  let vin = vin_code.toUpperCase();
+  log.info("getVehicleModelsByMake vin: " + vin_code + " uid is " + ctx.uid);
+  let vin = vin_code;
+  console.log(typeof(vin) + vin);
   if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
@@ -464,13 +465,13 @@ server.call("uploadDriverImages", allowAll, "上传证件照", "上传证件照"
 server.call("getUserVehicles", allowAll, "获取用户车信息", "获取用户车信息", (ctx: ServerContext, rep: ((result: any) => void)) => {
   log.info("getUserVehicles uid is " + ctx.uid);
   ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
-    if (result !== null && result != "" && result != undefined) {
+    if (result !== null && result !== "" && result !== undefined) {
       let multi = ctx.cache.multi();
       for (let id of result) {
         multi.hget(vehicle_entities, id);
       }
       multi.exec((err2, result2) => {
-        let vehicleFilter = result2.filter(e => e !== null)
+        let vehicleFilter = result2.filter(e => e !== null);
         if (vehicleFilter.length !== 0) {
           let vehicleFilters = [];
           (async () => {
@@ -540,42 +541,42 @@ server.call("damageCount", allowAll, "提交出险次数", "提交出险次数",
 });
 
 const provinces: Object = {
-  '上海': '310000',
-  '云南': '530000',
-  '内蒙古': '150000',
-  '北京': '110000',
-  '厦门': '350200',
-  '吉林': '220000',
-  '四川': '510000',
-  '大连': '210200',
-  '天津': '120000',
-  '宁夏': '640000',
-  '宁波': '330200',
-  '安徽': '340000',
-  '山东': '370000',
-  '山西': '140000',
-  '广东': '440000',
-  '广西': '450000',
-  '新疆': '650000',
-  '江苏': '320000',
-  '江西': '360000',
-  '河北': '130000',
-  '河南': '410000',
-  '浙江': '330000',
-  '海南': '460000',
-  '深圳': '440300',
-  '湖北': '420000',
-  '湖南': '430000',
-  '甘肃': '620000',
-  '福建': '350000',
-  '西藏': '540000',
-  '贵州': '520000',
-  '辽宁': '210000',
-  '重庆': '500000',
-  '陕西': '610000',
-  '青岛': '370200',
-  '青海': '630000',
-  '黑龙江': '230000'
+  "上海": "310000",
+  "云南": "530000",
+  "内蒙古": "150000",
+  "北京": "110000",
+  "厦门": "350200",
+  "吉林": "220000",
+  "四川": "510000",
+  "大连": "210200",
+  "天津": "120000",
+  "宁夏": "640000",
+  "宁波": "330200",
+  "安徽": "340000",
+  "山东": "370000",
+  "山西": "140000",
+  "广东": "440000",
+  "广西": "450000",
+  "新疆": "650000",
+  "江苏": "320000",
+  "江西": "360000",
+  "河北": "130000",
+  "河南": "410000",
+  "浙江": "330000",
+  "海南": "460000",
+  "深圳": "440300",
+  "湖北": "420000",
+  "湖南": "430000",
+  "甘肃": "620000",
+  "福建": "350000",
+  "西藏": "540000",
+  "贵州": "520000",
+  "辽宁": "210000",
+  "重庆": "500000",
+  "陕西": "610000",
+  "青岛": "370200",
+  "青海": "630000",
+  "黑龙江": "230000"
 };
 
 // let pList = [
@@ -728,7 +729,7 @@ const provinces: Object = {
 // for (let i = 0; i < pList.length; i++) {
 
 
-//   let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
 //   let data: Object = {
 //     "operType": "QCC",
@@ -748,8 +749,8 @@ const provinces: Object = {
 //     method: "POST",
 //     path: "/zkyq-web/city/queryCity",
 //     headers: {
-//       'Content-Type': 'application/json',
-//       'Content-Length': Buffer.byteLength(postData)
+//       "Content-Type": "application/json",
+//       "Content-Length": Buffer.byteLength(postData)
 //     }
 //   };
 
@@ -777,7 +778,7 @@ const provinces: Object = {
 //       }
 //     });
 
-//     req.on('error', (e) => {
+//     req.on("error", (e) => {
 //       log.info(`problem with request: ${e.message}`);
 //     });
 //   });
@@ -805,7 +806,7 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     });
   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+  let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
   let data: Object = {
     "operType": "QCC",
@@ -825,8 +826,8 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
     method: "POST",
     path: "/zkyq-web/city/queryCity",
     headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData)
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(postData)
     }
   };
 
@@ -866,7 +867,7 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
       }
     });
 
-    req.on('error', (e) => {
+    req.on("error", (e) => {
       log.info(`problem with request: ${e.message}`);
       rep({
         code: 500,
@@ -878,104 +879,180 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
   req.end(postData);
 });
 
-server.call("getModelsInfoByVehicleInfo", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), vehicleInfo: Object) => {
-  // log.info("licenseNumber: " + licenseNumber + "responseNumber: " + responseNumber);
-  // if (vehicleInfo["responseNo"] === undefined ||
-  //   vehicleInfo["licenseNo"] === undefined ||
-  //   vehicleInfo["frameNo"] === undefined) {
-  //   rep({
-  //     code: 400,
-  //     msg: "Wrong arguments!"
-  //   });
-  // }
+// server.call("getModelsInfoByVehicleInfo", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), vehicleInfo: Object) => {
+//   // log.info("licenseNumber: " + licenseNumber + "responseNumber: " + responseNumber);
+//   // if (vehicleInfo["responseNo"] === undefined ||
+//   //   vehicleInfo["licenseNo"] === undefined ||
+//   //   vehicleInfo["frameNo"] === undefined) {
+//   //   rep({
+//   //     code: 400,
+//   //     msg: "Wrong arguments!"
+//   //   });
+//   // }
 
-  log.info("Here: ");
-  log.info(JSON.stringify(vehicleInfo));
+//   log.info("Here: ");
+//   log.info(JSON.stringify(vehicleInfo));
 
-  if (!verify([stringVerifier("responseNo", vehicleInfo["responseNo"]),
-  stringVerifier("licenseNo", vehicleInfo["licenseNo"]),
-  stringVerifier("frameNo", vehicleInfo["frameNo"])
-  ], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
+//   if (!verify([stringVerifier("responseNo", vehicleInfo["responseNo"]),
+//   stringVerifier("licenseNo", vehicleInfo["licenseNo"]),
+//   stringVerifier("frameNo", vehicleInfo["frameNo"])
+//   ], (errors: string[]) => {
+//     log.info(errors);
+//     rep({
+//       code: 400,
+//       msg: errors.join("\n")
+//     });
+//   })) {
+//     return;
+//   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
-  log.info(sendTimeString);
+//   log.info(sendTimeString);
 
-  let data: Object = {
-    "operType": "JYK",
-    "msg": "",
-    "sendTime": sendTimeString,
-    "sign": "",
-    "data": {
-      "applicationID": "FENGCHAOHUZHU_SERVICE",
-      "responseNo": vehicleInfo["responseNo"],
-      "frameNo": vehicleInfo["frameNo"],
-      "licenseNo": vehicleInfo["licenseNo"]
-    }
-  };
+//   let data: Object = {
+//     "operType": "JYK",
+//     "msg": "",
+//     "sendTime": sendTimeString,
+//     "sign": "",
+//     "data": {
+//       "applicationID": "FENGCHAOHUZHU_SERVICE",
+//       "responseNo": vehicleInfo["responseNo"],
+//       "frameNo": vehicleInfo["frameNo"],
+//       "licenseNo": vehicleInfo["licenseNo"]
+//     }
+//   };
 
-  let postData: string = JSON.stringify(data);
+//   let postData: string = JSON.stringify(data);
 
-  log.info(postData);
+//   log.info(postData);
 
-  let options = {
-    hostname: "139.198.1.73",
-    port: 8081,
-    method: "POST",
-    path: "/zkyq-web/prerelease/ifmEntry",
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData)
-    }
-  };
+//   let options = {
+//     hostname: "139.198.1.73",
+//     port: 8081,
+//     method: "POST",
+//     path: "/zkyq-web/prerelease/ifmEntry",
+//     headers: {
+//       "Content-Type": "application/json",
+//       "Content-Length": Buffer.byteLength(postData)
+//     }
+//   };
 
-  let req = http.request(options, function (res) {
-    log.info("Status: " + res.statusCode);
-    res.setEncoding("utf8");
+//   let req = http.request(options, function (res) {
+//     log.info("Status: " + res.statusCode);
+//     res.setEncoding("utf8");
 
-    let result: string = "";
+//     let result: string = "";
 
-    res.on("data", function (body) {
-      result += body;
-    });
+//     res.on("data", function (body) {
+//       result += body;
+//     });
 
-    res.on("end", function () {
-      log.info(result);
-      let retData: Object = JSON.parse(result);
-      if (retData["state"] === "1") {
-        rep({
-          code: 200,
-          data: retData["data"]
-        });
-      } else {
-        rep({
-          code: 400,
-          msg: retData["msg"]
-        });
-      }
+//     res.on("end", function () {
+//       log.info(result);
+//       let retData: Object = JSON.parse(result);
+//       if (retData["state"] === "1") {
+//         rep({
+//           code: 200,
+//           data: retData["data"]
+//         });
+//       } else {
+//         rep({
+//           code: 400,
+//           msg: retData["msg"]
+//         });
+//       }
 
-      req.on('error', (e) => {
-        log.info(`problem with request: ${e.message}`);
-        rep({
-          code: 500,
-          msg: e.message
-        });
-      });
-    });
-  });
+//       req.on("error", (e) => {
+//         log.info(`problem with request: ${e.message}`);
+//         rep({
+//           code: 500,
+//           msg: e.message
+//         });
+//       });
+//     });
+//   });
 
-  req.end(postData);
-});
+//   req.end(postData);
+// });
 
-server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
+// server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
+//   log.info("licenseNumber " + licenseNumber);
+//   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
+//     log.info(errors);
+//     rep({
+//       code: 400,
+//       msg: errors.join("\n")
+//     });
+//   })) {
+//     return;
+//   }
+
+//   let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
+
+//   let data: Object = {
+//     "operType": "BDB",
+//     "msg": "",
+//     "sendTime": sendTimeString,
+//     "sign": "",
+//     "data": {
+//       "licenseNo": licenseNumber,
+//       "applicationID": "FENGCHAOHUZHU_SERVICE"
+//     }
+//   };
+
+//   let postData: string = JSON.stringify(data);
+//   let options = {
+//     hostname: "139.198.1.73",
+//     port: 8081,
+//     method: "POST",
+//     path: "/zkyq-web/prerelease/ifmEntry",
+//     headers: {
+//       "Content-Type": "application/json",
+//       "Content-Length": Buffer.byteLength(postData)
+//     }
+//   };
+
+//   let req = http.request(options, function (res) {
+//     log.info("Status: " + res.statusCode);
+//     res.setEncoding("utf8");
+
+//     let result: string = "";
+
+//     res.on("data", function (body) {
+//       result += body;
+//     });
+
+//     res.on("end", function () {
+//       let retData: Object = JSON.parse(result);
+//       // log.info("Here: ");
+//       // log.info(JSON.stringify(retData));
+//       if (retData["state"] === "1") {
+//         rep({
+//           code: 200,
+//           data: retData["data"]
+//         });
+//       } else {
+//         rep({
+//           code: 400,
+//           msg: retData["msg"]
+//         });
+//       }
+//     });
+
+//     req.on("error", (e) => {
+//       log.info(`problem with request: ${e.message}`);
+//       rep({
+//         code: 500,
+//         msg: e.message
+//       });
+//     });
+//   });
+
+//   req.end(postData);
+// });
+
+server.call("getVehicleByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
   log.info("licenseNumber " + licenseNumber);
   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
     log.info(errors);
@@ -987,7 +1064,7 @@ server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息
     return;
   }
 
-  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+  let sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
 
   let data: Object = {
     "operType": "BDB",
@@ -1007,84 +1084,8 @@ server.call("getVehicleInfoByLicense", allowAll, "根据车牌号查询车信息
     method: "POST",
     path: "/zkyq-web/prerelease/ifmEntry",
     headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData)
-    }
-  };
-
-  let req = http.request(options, function (res) {
-    log.info("Status: " + res.statusCode);
-    res.setEncoding("utf8");
-
-    let result: string = "";
-
-    res.on("data", function (body) {
-      result += body;
-    });
-
-    res.on("end", function () {
-      let retData: Object = JSON.parse(result);
-      // log.info("Here: ");
-      // log.info(JSON.stringify(retData));
-      if (retData["state"] === "1") {
-        rep({
-          code: 200,
-          data: retData["data"]
-        });
-      } else {
-        rep({
-          code: 400,
-          msg: retData["msg"]
-        });
-      }
-    });
-
-    req.on('error', (e) => {
-      log.info(`problem with request: ${e.message}`);
-      rep({
-        code: 500,
-        msg: e.message
-      });
-    });
-  });
-
-  req.end(postData);
-});
-
-server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "根据车牌号查询车信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
-  log.info("licenseNumber " + licenseNumber);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
-
-  let sendTimeString: string = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
-
-  let data: Object = {
-    "operType": "BDB",
-    "msg": "",
-    "sendTime": sendTimeString,
-    "sign": "",
-    "data": {
-      "licenseNo": licenseNumber,
-      "applicationID": "FENGCHAOHUZHU_SERVICE"
-    }
-  };
-
-  let postData: string = JSON.stringify(data);
-  let options = {
-    hostname: "139.198.1.73",
-    port: 8081,
-    method: "POST",
-    path: "/zkyq-web/prerelease/ifmEntry",
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData)
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(postData)
     }
   };
 
@@ -1133,8 +1134,8 @@ server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "
           method: "POST",
           path: "/zkyq-web/prerelease/ifmEntry",
           headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData)
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(postData)
           }
         };
 
@@ -1165,7 +1166,7 @@ server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "
               });
             }
 
-            req.on('error', (e) => {
+            req.on("error", (e) => {
               log.info(`problem with request: ${e.message}`);
               rep({
                 code: 500,
@@ -1184,7 +1185,7 @@ server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "
       }
     });
 
-    req.on('error', (e) => {
+    req.on("error", (e) => {
       log.info(`problem with request: ${e.message}`);
       rep({
         code: 500,
@@ -1196,7 +1197,7 @@ server.call("getCarInfoByLicense", allowAll, "根据车牌号查询车信息", "
   req.end(postData);
 });
 
-server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin: string, vehicle_models: Object[]) => {
+server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信息", (ctx: ServerContext, rep: ((result: any) => void), vehicle_models: Object[]) => {
   for (let model of vehicle_models) {
     if (!verify([stringVerifier("vehicleCode", model["vehicleCode"])], (errors: string[]) => {
       log.info(errors);
@@ -1209,10 +1210,10 @@ server.call("addVehicleModels", allowAll, "添加车型信息", "添加车型信
     }
   }
   let callback = uuid.v1();
-  let args = [vin, vehicle_models, callback];
+  let args = [vehicle_models, callback];
   log.info("addVehicleModels " + args + "uid is " + ctx.uid);
   const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
-  ctx.publish(pkt)
+  ctx.publish(pkt);
   wait_for_response(ctx.cache, callback, rep);
 });
 

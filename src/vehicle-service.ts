@@ -20,4 +20,4 @@ svc.registerServer(server);
 svc.registerProcessor(processor);
 
 svc.run();
-trigger_run();
+// trigger_run();
