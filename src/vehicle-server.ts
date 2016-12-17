@@ -309,8 +309,7 @@ server.call("addDrivers", allowAll, "添加驾驶员信息", "添加驾驶员信
 
 server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin_code: string) => {
   log.info("getVehicleModelsByMake vin: " + vin_code + " uid is " + ctx.uid);
-  let vin = vin_code;
-  console.log(typeof(vin) + vin);
+  let vin = vin_code.toUpperCase();
   if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
     rep({
       code: 400,
