@@ -111,35 +111,35 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
       //   await cache.hsetAsync("vehicle-entities", vid, pkt);
 
       // } else {
-        let vid = uuid.v1();
-        log.info("new vehicle id: " + vid);
-        await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
-        let vehicle = {
-          id: vid,
-          uid: uid,
-          owner: owner,
-          owner_type: 0,
-          recommend: recommend,
-          drivers: [],
-          vehicle_code: vehicle_code,
-          vin_code: vin,
-          license_no: license_no,
-          engine_no: engine_no,
-          register_date: register_date,
-          average_mileage: average_mileage,
-          is_transfer: is_transfer,
-          last_insurance_company: last_insurance_company,
-          insurance_due_date: insurance_due_date,
-          fuel_type: fuel_type
-        };
-        const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
-        vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
-        let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-        const pkt = await msgpack_encode(vehicle);
-        multi.hset("vehicle-entities", vid, pkt);
-        multi.lpush("vehicle-" + uid, vid);
-        multi.lpush("vehicle", vid);
-        await multi.execAsync();
+      let vid = uuid.v1();
+      log.info("new vehicle id: " + vid);
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
+      let vehicle = {
+        id: vid,
+        uid: uid,
+        owner: owner,
+        owner_type: 0,
+        recommend: recommend,
+        drivers: [],
+        vehicle_code: vehicle_code,
+        vin_code: vin,
+        license_no: license_no,
+        engine_no: engine_no,
+        register_date: register_date,
+        average_mileage: average_mileage,
+        is_transfer: is_transfer,
+        last_insurance_company: last_insurance_company,
+        insurance_due_date: insurance_due_date,
+        fuel_type: fuel_type
+      };
+      const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
+      vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      const pkt = await msgpack_encode(vehicle);
+      multi.hset("vehicle-entities", vid, pkt);
+      multi.lpush("vehicle-" + uid, vid);
+      multi.lpush("vehicle", vid);
+      await multi.execAsync();
       // }
       await db.query("COMMIT");
       await set_for_response(cache, callback, { code: 200, data: vid });
@@ -207,35 +207,35 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
       //   const pkt = await msgpack_encode(vehicle);
       //   await cache.hsetAsync("vehicle-entities", vid, pkt);
       // } else {
-        let vid = uuid.v1();
-        log.info("new vehicle id: " + vid);
-        await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
-        let vehicle = {
-          id: vid,
-          uid: uid,
-          owner: owner,
-          owner_type: 0,
-          recommend: recommend,
-          drivers: [],
-          vehicle_code: vehicle_code,
-          vin_code: vin,
-          engine_no: engine_no,
-          license_no: null,
-          average_mileage: average_mileage,
-          is_transfer: is_transfer,
-          receipt_no: receipt_no,
-          receipt_date: receipt_date,
-          last_insurance_company: last_insurance_company,
-          fuel_type: fuel_type
-        };
-        const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
-        vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
-        let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-        const pkt = await msgpack_encode(vehicle);
-        multi.hset("vehicle-entities", vid, pkt);
-        multi.lpush("vehicle-" + uid, vid);
-        multi.lpush("vehicle", vid);
-        await multi.execAsync();
+      let vid = uuid.v1();
+      log.info("new vehicle id: " + vid);
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
+      let vehicle = {
+        id: vid,
+        uid: uid,
+        owner: owner,
+        owner_type: 0,
+        recommend: recommend,
+        drivers: [],
+        vehicle_code: vehicle_code,
+        vin_code: vin,
+        engine_no: engine_no,
+        license_no: null,
+        average_mileage: average_mileage,
+        is_transfer: is_transfer,
+        receipt_no: receipt_no,
+        receipt_date: receipt_date,
+        last_insurance_company: last_insurance_company,
+        fuel_type: fuel_type
+      };
+      const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
+      vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
+      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+      const pkt = await msgpack_encode(vehicle);
+      multi.hset("vehicle-entities", vid, pkt);
+      multi.lpush("vehicle-" + uid, vid);
+      multi.lpush("vehicle", vid);
+      await multi.execAsync();
       // }
       await db.query("COMMIT");
       await set_for_response(cache, callback, { code: 200, data: vid });
@@ -269,19 +269,20 @@ processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, 
         if (person["rowCount"] !== 0) {
           let pid = person.rows[0]["id"];
           pids.push(pid);
+          await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [driver["name"], driver["phone"], driver["identity_no"]]);
           const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
           if (driverId["rowCount"] === 0) {
             let did = uuid.v4();
             log.info("new driver" + did);
             await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
-            vehicle["drivers"].push({
-              id: pid,
-              name: trim(person.rows[0]["name"]),
-              identity_no: trim(person.rows[0]["identity_no"]),
-              phone: trim(person.rows[0]["phone"]),
-              is_primary: driver["is_primary"]
-            });
           }
+          vehicle["drivers"].push({
+            id: pid,
+            name: driver["name"],
+            identity_no: driver["identity_no"],
+            phone: driver["phone"],
+            is_primary: driver["is_primary"]
+          });
         } else {
           let pid = uuid.v4();
           let did = uuid.v4();
