@@ -682,7 +682,7 @@ function transVehicleModel(models) {
       "bodyType": null,
       "engineDesc": model["engineDesc"],
       "gearboxName": model["gearBoxType"],
-      "yearPattern": null,
+      "yearPattern": model["parentVehName"],
       "groupName": null,
       "cfgLevel": model["remark"],
       "purchasePrice": model["purchasePrice"],
