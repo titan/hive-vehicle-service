@@ -240,9 +240,9 @@ server.call("getDriver", allowAll, "获取驾驶人信息", "获取驾驶人信�
   });
 });
 
-server.call("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车信息上牌车", (ctx: ServerContext, rep: ((result: any) => void), name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin_code: string) => {
+server.call("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车信息上牌车", (ctx: ServerContext, rep: ((result: any) => void), name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin_code: string, accident_status: number) => {
   log.info("setVehicleOnCard: " + ctx.uid);
-  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)], (errors: string[]) => {
+  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code), numberVerifier("accident_status", accident_status)], (errors: string[]) => {
     log.info(errors);
     rep({
       code: 400,
@@ -258,7 +258,7 @@ server.call("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车
   let ulicense_no = license_no.toUpperCase();
   let args = [
     name, identity_no, phone, uid, recommend, vehicle_code, ulicense_no, uengine_no,
-    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, callback
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, callback
   ];
   const pkt: CmdPacket = { cmd: "setVehicleOnCard", args: args };
   ctx.publish(pkt);
