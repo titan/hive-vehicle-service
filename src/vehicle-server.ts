@@ -521,23 +521,6 @@ server.call("refresh", allowAll, "refresh", "refresh", (ctx: ServerContext, rep:
   wait_for_response(ctx.cache, cbflag, rep);
 });
 
-server.call("damageCount", allowAll, "提交出险次数", "提交出险次数", (ctx: ServerContext, rep: ((result: any) => void), vid: string, count: number) => {
-  log.info("damageCount " + vid + " count " + count);
-  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-    log.info(errors);
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
-  let callback = uuid.v1();
-  const pkt: CmdPacket = { cmd: "damageCount", args: [vid, count, callback] };
-  ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
-});
-
 const provinces: Object = {
   "上海": "310000",
   "云南": "530000",
