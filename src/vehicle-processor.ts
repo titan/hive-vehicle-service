@@ -534,8 +534,7 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
         }
       }
       let vehicleUsers: Object = {};
-      console.log(vehicleJsons.length);
-      for (let vehicle of    ) {
+      for (let vehicle of vehicleJsons ) {
         let vehicle_id = vehicle["id"];
         if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
           if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
@@ -555,9 +554,9 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
         multi.lpush("a2vehicle", vehicle_id);
         multi.hset("a2vehicle-entities", vehicle_id, pkt);
       }
-      for (const key of Object.keys(vehicleUsers)) {
-        // multi.lpush("vehicle-" + key, vehicleUsers[key]);
-      }
+//       for (const key of Object.keys(vehicleUsers)) {
+//         multi.lpush("vehicle-" + key, vehicleUsers[key]);
+//       }
       await multi.execAsync();
       await set_for_response(cache, cbflag, { code: 200, data: "refresh success" });
       done();
@@ -573,34 +572,6 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
     }
   })();
 });
-
-// 出险次数
-// processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number, callback: string) => {
-//   log.info("damageCount ");
-//   const db: PGClient = ctx.db;
-//   const cache: RedisClient = ctx.cache;
-//   const done = ctx.done;
-//   (async () => {
-//     try {
-//       await db.query("UPDATE vehicles SET accident_status = $1 WHERE id = $2 and deleted = false", [count, vid]);
-//       const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-//       let vehicle = await msgpack_decode(vehicleJson);
-//       vehicle["accident_status"] = count;
-//       let pkt = await msgpack_encode(vehicle);
-//       await cache.hsetAsync("vehicle-entities", vid, pkt);
-//       await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_status: vehicle["accident_status"] } });
-//       done();
-//     } catch (e) {
-//       log.error(e);
-//       set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-//         done();
-//       }).catch(e => {
-//         log.error(e);
-//         done();
-//       });
-//     }
-//   })();
-// });
 
 processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: Object, cbflag: string) => {
   log.info(`addVehicleModels, vehicle_and_models: ${JSON.stringify(vehicle_and_models)}, cbflag: ${cbflag}`);
