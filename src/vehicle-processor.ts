@@ -61,7 +61,7 @@ export const processor = new Processor();
 
 // 新车已上牌个人
 processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
-  register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string, callback: string) => {
+  register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin: string, accident_status: number, callback: string) => {
   log.info("setVehicleOnCard");
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -113,7 +113,7 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
       // } else {
       let vid = uuid.v1();
       log.info("new vehicle id: " + vid);
-      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code,license_no,engine_no,register_date,average_mileage,is_transfer, last_insurance_company,insurance_due_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin]);
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no,engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status]);
       let vehicle = {
         id: vid,
         uid: uid,
@@ -130,7 +130,8 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
         is_transfer: is_transfer,
         last_insurance_company: last_insurance_company,
         insurance_due_date: insurance_due_date,
-        fuel_type: fuel_type
+        fuel_type: fuel_type,
+        accident_status: accident_status
       };
       const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
       vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
@@ -209,7 +210,7 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
       // } else {
       let vid = uuid.v1();
       log.info("new vehicle id: " + vid);
-      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
       let vehicle = {
         id: vid,
         uid: uid,
@@ -507,7 +508,7 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
-      console.log(vehicles.length);
+      // console.log(vehicles.length);
       let drivers = dbDriver.rows;
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
       let vehicleJsons = [];
@@ -525,7 +526,6 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
             vehicleJson["drivers"] = [];
             vehicleJsons.push(vehicleJson);
             vehicleCodeJson.push(vehicleCode);
-            multi.lpush("a2vehicle", vid);
             // multi.sadd("vehicle-model", vin);
             let pkt2 = await msgpack_encode(vehicleModelJson);
             // multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
@@ -534,7 +534,9 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
         }
       }
       let vehicleUsers: Object = {};
-      for (let vehicle of vehicleJsons) {
+      console.log(vehicleJsons.length);
+      for (let vehicle of    ) {
+        let vehicle_id = vehicle["id"];
         if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
           if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
             vehicleUsers[vehicle["uid"]].push(vehicle["id"]);
@@ -550,7 +552,8 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
           }
         }
         let pkt = await msgpack_encode(vehicle);
-        multi.hset("a2vehicle-entities", vid, pkt);
+        multi.lpush("a2vehicle", vehicle_id);
+        multi.hset("a2vehicle-entities", vehicle_id, pkt);
       }
       for (const key of Object.keys(vehicleUsers)) {
         // multi.lpush("vehicle-" + key, vehicleUsers[key]);
@@ -572,32 +575,32 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
 });
 
 // 出险次数
-processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number, callback: string) => {
-  log.info("damageCount ");
-  const db: PGClient = ctx.db;
-  const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
-  (async () => {
-    try {
-      await db.query("UPDATE vehicles SET accident_status = $1 WHERE id = $2 and deleted = false", [count, vid]);
-      const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-      let vehicle = await msgpack_decode(vehicleJson);
-      vehicle["accident_status"] = count;
-      let pkt = await msgpack_encode(vehicle);
-      await cache.hsetAsync("vehicle-entities", vid, pkt);
-      await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_status: vehicle["accident_status"] } });
-      done();
-    } catch (e) {
-      log.error(e);
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
-    }
-  })();
-});
+// processor.call("damageCount", (ctx: ProcessorContext, vid: string, count: number, callback: string) => {
+//   log.info("damageCount ");
+//   const db: PGClient = ctx.db;
+//   const cache: RedisClient = ctx.cache;
+//   const done = ctx.done;
+//   (async () => {
+//     try {
+//       await db.query("UPDATE vehicles SET accident_status = $1 WHERE id = $2 and deleted = false", [count, vid]);
+//       const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+//       let vehicle = await msgpack_decode(vehicleJson);
+//       vehicle["accident_status"] = count;
+//       let pkt = await msgpack_encode(vehicle);
+//       await cache.hsetAsync("vehicle-entities", vid, pkt);
+//       await set_for_response(cache, callback, { code: 200, data: { vid: vid, accident_status: vehicle["accident_status"] } });
+//       done();
+//     } catch (e) {
+//       log.error(e);
+//       set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+//         done();
+//       }).catch(e => {
+//         log.error(e);
+//         done();
+//       });
+//     }
+//   })();
+// });
 
 processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: Object, cbflag: string) => {
   log.info(`addVehicleModels, vehicle_and_models: ${JSON.stringify(vehicle_and_models)}, cbflag: ${cbflag}`);
