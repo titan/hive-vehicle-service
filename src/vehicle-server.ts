@@ -670,33 +670,6 @@ server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result:
   req.end(postData);
 });
 
-function transVehicleModel(models) {
-  const vehicleModels = [];
-  for (const model of models) {
-    const vehicleModel = {
-      "vehicleCode": model["brandCode"].replace(/-/g, ""),
-      "vehicleName": model["standardName"],
-      "brandName": model["brandName"],
-      "familyName": model["familyName"],
-      "bodyType": null,
-      "engineDesc": model["engineDesc"],
-      "gearboxName": model["gearBoxType"],
-      "yearPattern": model["parentVehName"],
-      "groupName": null,
-      "cfgLevel": model["remark"],
-      "purchasePrice": model["purchasePrice"],
-      "purchasePriceTax": model["purchasePriceTax"],
-      "seat": model["seat"],
-      "effluentStandard": null,
-      "pl": null,
-      "fuelJetType": null,
-      "drivenType": null
-    };
-    vehicleModels.push(vehicleModel);
-  }
-  return vehicleModels;
-}
-
 server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
   log.info(`fetchVehicleModelByLicense, licenseNumber: ${licenseNumber}`);
   if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
@@ -795,9 +768,8 @@ server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车
                 log.info(result);
                 const retData1: Object = JSON.parse(result);
                 if (retData1["state"] === "1") {
-                  const vehicle_models = transVehicleModel(retData1["data"]);
+                  vehicleInfo["models"]["vehicleCode"] = retData1["data"]["brandCode"].replace(/-/g, ""),
                   vehicleInfo["models"] = retData1["data"];
-                  vehicleInfo["std_models"] = vehicle_models;
                   const cbflag = uuid.v1();
                   const args = [vehicleInfo, cbflag];
                   const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
