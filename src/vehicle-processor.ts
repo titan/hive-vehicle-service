@@ -269,7 +269,7 @@ processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, 
         if (person["rowCount"] !== 0) {
           let pid = person.rows[0]["id"];
           pids.push(pid);
-          await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [driver["name"], driver["phone"], driver["identity_no"]]);
+          await db.query("UPDATE person SET name = $1 WHERE identity_no = $2 AND deleted = false", [driver["name"], driver["identity_no"]]);
           const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
           if (driverId["rowCount"] === 0) {
             let did = uuid.v4();
@@ -494,19 +494,20 @@ function trim(str: string) {
   }
 }
 
-processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
-  log.info("refresh " + callback);
+processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string, vid?: string) => {
+  log.info("refresh " + cbflag + " vid is " + vid);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
   (async () => {
     try {
       // const dbVehicleModel = await db.query("SELECT vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models");
-      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code", []);
-      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_status, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner");
+      const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code" + (vid ? " AND vehicles.id = $1" : ""), (vid ? [vid] : []));
+      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_status, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
+      console.log(vehicles.length);
       let drivers = dbDriver.rows;
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
       let vehicleJsons = [];
@@ -524,11 +525,11 @@ processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
             vehicleJson["drivers"] = [];
             vehicleJsons.push(vehicleJson);
             vehicleCodeJson.push(vehicleCode);
-            multi.lpush("vehicle", vid);
-            multi.sadd("vehicle-model", vin);
+            multi.lpush("a2vehicle", vid);
+            // multi.sadd("vehicle-model", vin);
             let pkt2 = await msgpack_encode(vehicleModelJson);
-            multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
-            multi.hset("vehicle-model-entities", vehicleCode, pkt2);
+            // multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
+            // multi.hset("vehicle-model-entities", vehicleCode, pkt2);
           }
         }
       }
@@ -546,24 +547,24 @@ processor.call("refresh", (ctx: ProcessorContext, callback: string) => {
           let dvid = trim(driver["vid"]);
           if (vid === dvid) {
             vehicle["drivers"].push(row2driver(driver));
-            let pkt = await msgpack_encode(vehicle);
-            multi.hset("vehicle-entities", vid, pkt);
           }
         }
+        let pkt = await msgpack_encode(vehicle);
+        multi.hset("a2vehicle-entities", vid, pkt);
       }
       for (const key of Object.keys(vehicleUsers)) {
-        multi.lpush("vehicle-" + key, vehicleUsers[key]);
+        // multi.lpush("vehicle-" + key, vehicleUsers[key]);
       }
       await multi.execAsync();
-      await set_for_response(cache, callback, { code: 200, data: "refresh success" });
+      await set_for_response(cache, cbflag, { code: 200, data: "refresh success" });
       done();
       log.info("refresh success");
     } catch (e) {
-      log.error(e);
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
+      log.info(e);
+      set_for_response(cache, cbflag, { code: 500, msg: e.message }).then(_ => {
         done();
       }).catch(e => {
-        log.error(e);
+        log.info(e);
         done();
       });
     }

@@ -137,7 +137,7 @@ server.call("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", 
   })) {
     return;
   }
-  log.info("getVehicle vid:" + vid + "uid is " + ctx.uid);
+  log.info("getVehicle vid:" + vid + " uid is " + ctx.uid);
   ctx.cache.hget(vehicle_entities, vid, function (err, result) {
     if (err) {
       rep({ code: 500, msg: err });
@@ -513,13 +513,12 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: ((resu
 }
 
 
-server.call("refresh", allowAll, "refresh", "refresh", (ctx: ServerContext, rep: ((result: any) => void)) => {
-  log.info("refresh");
-  let callback = uuid.v1();
-  log.info(callback);
-  const pkt: CmdPacket = { cmd: "refresh", args: [callback] };
+server.call("refresh", allowAll, "refresh", "refresh", (ctx: ServerContext, rep: ((result: any) => void), vid?: string) => {
+  log.info(`refresh, vehicle id is ${vid}`);
+  let cbflag = uuid.v1();
+  const pkt: CmdPacket = { cmd: "refresh", args: vid ? ["admin", cbflag, vid] : ["admin", cbflag] };
   ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
+  wait_for_response(ctx.cache, cbflag, rep);
 });
 
 server.call("damageCount", allowAll, "提交出险次数", "提交出险次数", (ctx: ServerContext, rep: ((result: any) => void), vid: string, count: number) => {
