@@ -210,7 +210,7 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
       // } else {
       let vid = uuid.v1();
       log.info("new vehicle id: " + vid);
-      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
       let vehicle = {
         id: vid,
         uid: uid,
@@ -508,7 +508,6 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
-      // console.log(vehicles.length);
       let drivers = dbDriver.rows;
       let multi = bluebird.promisifyAll(cache.multi()) as Multi;
       let vehicleJsons = [];
@@ -526,14 +525,16 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
             vehicleJson["drivers"] = [];
             vehicleJsons.push(vehicleJson);
             vehicleCodeJson.push(vehicleCode);
-            // multi.sadd("vehicle-model", vin);
+            multi.sadd("vehicle-model", vin);
             let pkt2 = await msgpack_encode(vehicleModelJson);
-            // multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
-            // multi.hset("vehicle-model-entities", vehicleCode, pkt2);
+            multi.hset("vehicle-vin-codes", vin, JSON.stringify(vehicleCodeJson));
+            multi.hset("vehicle-model-entities", vehicleCode, pkt2);
+            break;
           }
         }
       }
       let vehicleUsers: Object = {};
+      console.log(vehicleJsons.length);
       for (let vehicle of vehicleJsons ) {
         let vehicle_id = vehicle["id"];
         if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
@@ -551,12 +552,12 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
           }
         }
         let pkt = await msgpack_encode(vehicle);
-        multi.lpush("a2vehicle", vehicle_id);
-        multi.hset("a2vehicle-entities", vehicle_id, pkt);
+        multi.lpush("vehicle", vehicle_id);
+        multi.hset("vehicle-entities", vehicle_id, pkt);
       }
-//       for (const key of Object.keys(vehicleUsers)) {
-//         multi.lpush("vehicle-" + key, vehicleUsers[key]);
-//       }
+      // for (const key of Object.keys(vehicleUsers)) {
+      //   multi.lpush("vehicle-" + key, vehicleUsers[key]);
+      // }
       await multi.execAsync();
       await set_for_response(cache, cbflag, { code: 200, data: "refresh success" });
       done();
