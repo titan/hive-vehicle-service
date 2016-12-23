@@ -440,21 +440,21 @@ server.call("uploadDriverImages", allowAll, "上传证件照", "上传证件照"
               flag = true;
             }
           }
+          if (!flag) {
+            rep({ code: 400, msg: "主要驾驶人照片为空！！" });
+          } else {
+            let callback = uuid.v1();
+            let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
+            log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
+            const pkt: CmdPacket = { cmd: "uploadDriverImages", args: args };
+            ctx.publish(pkt);
+            wait_for_response(ctx.cache, callback, rep);
+          }
         } catch (e) {
           log.error(e);
           rep({ code: 500, msg: e.message });
         }
       })();
-      if (!flag) {
-        rep({ code: 400, msg: "主要驾驶人照片为空！！" });
-      } else {
-        let callback = uuid.v1();
-        let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
-        log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-        const pkt: CmdPacket = { cmd: "uploadDriverImages", args: args };
-        ctx.publish(pkt);
-        wait_for_response(ctx.cache, callback, rep);
-      }
     } else {
       rep({ code: 404, msg: "Vehicle not found" });
     }
