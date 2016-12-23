@@ -436,7 +436,7 @@ function row2vehicle(row: Object) {
   return {
     id: row["id"] ? row["id"].trim() : "",
     uid: row["uid"] ? row["uid"].trim() : "",
-    owner_type: row["owner_type"] ? row["owner_type"].trim() : "",
+    owner_type: row["owner_type"], 
     vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
     license_no: row["license_no"] ? row["license_no"].trim() : "",
     engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
