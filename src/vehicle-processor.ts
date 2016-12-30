@@ -276,14 +276,27 @@ processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, 
             let did = uuid.v4();
             log.info("new driver" + did);
             await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
+            vehicle["drivers"].push({
+              id: pid,
+              name: driver["name"],
+              identity_no: driver["identity_no"],
+              phone: driver["phone"],
+              is_primary: driver["is_primary"]
+            });
+          } else {
+            // update driver info
+            log.info("driver id is " + pid);
+            await db.query("UPDATE drivers SET is_primary = $1", [driver["is_primary"]]);
+            for (let d of vehicle["drivers"]) {
+              if (pid === d["id"]) {
+                d["name"] = driver["name"];
+                d["identity_no"] = driver["identity_no"];
+                d["phone"] = driver["phone"];
+                d["is_primary"] = driver["is_primary"];
+                break;
+              }
+            }
           }
-          vehicle["drivers"].push({
-            id: pid,
-            name: driver["name"],
-            identity_no: driver["identity_no"],
-            phone: driver["phone"],
-            is_primary: driver["is_primary"]
-          });
         } else {
           let pid = uuid.v4();
           let did = uuid.v4();
@@ -436,7 +449,7 @@ function row2vehicle(row: Object) {
   return {
     id: row["id"] ? row["id"].trim() : "",
     uid: row["uid"] ? row["uid"].trim() : "",
-    owner_type: row["owner_type"], 
+    owner_type: row["owner_type"],
     vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
     license_no: row["license_no"] ? row["license_no"].trim() : "",
     engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
@@ -535,7 +548,7 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
       }
       let vehicleUsers: Object = {};
       console.log(vehicleJsons.length);
-      for (let vehicle of vehicleJsons ) {
+      for (let vehicle of vehicleJsons) {
         let vehicle_id = vehicle["id"];
         if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
           if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
