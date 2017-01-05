@@ -632,20 +632,26 @@ processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: O
   })();
 });
 
-processor.call("setVerified", (ctx: ProcessorContext, vid: string, identity_no: string, callback: string) => {
-  log.info("setVerified " + vid);
+
+processor.call("setPersonVerified", (ctx: ProcessorContext, identity_no: string, flag: boolean, callback: string) => {
+  log.info("setPersonVerified " + identity_no);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
   (async () => {
     try {
-      await db.query("UPDATE person SET verified = true WHERE identity_no = $1 AND deleted = false", [identity_no]);
-      let vehicleBuffer = await cache.hgetAsync("vehicle-entities", vid);
-      let vehicle = await msgpack_decode(vehicleBuffer);
-      vehicle["owner"]["verified"] = true;
-      vehicleBuffer = await msgpack_encode(vehicle);
-      await cache.hsetAsync("vehicle-entities", vid, vehicleBuffer);
-      await set_for_response(cache, callback, { code: 200, data: vid });
+      let vids = [];
+      await db.query("UPDATE person SET verified = $1 WHERE identity_no = $2 AND deleted = false", [flag, identity_no]);
+      const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1)", [identity_no]);
+      for (let row of vehicles["rows"]){
+        let vehicleBuffer = await cache.hgetAsync("vehicle-entities", row["id"]);
+        let vehicle = await msgpack_decode(vehicleBuffer);
+        vehicle["owner"]["verified"] = flag;
+        vehicleBuffer = await msgpack_encode(vehicle);
+        await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
+        vids.push(row["id"]);
+      }
+      await set_for_response(cache, callback, { code: 200, data: vids });
       done();
     } catch (e) {
       log.error(e);
