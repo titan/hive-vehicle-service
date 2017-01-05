@@ -841,3 +841,20 @@ server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车
   });
 });
 
+server.call("setPersonVerified", allowAll, "车主验证通过", "车主验证通过", (ctx: ServerContext, rep: ((result: any) => void), identity_no: string, flag: boolean) => {
+  if (!verify([stringVerifier("identity_no", identity_no), booleanVerifier("flag", flag)], (errors: string[]) => {
+    log.info(errors);
+    rep({
+      code: 400,
+      msg: errors.join("\n")
+    });
+  })) {
+    return;
+  }
+  let callback = uuid.v1();
+  let args = [identity_no, flag, callback];
+  log.info("setPersonVerified " + args + "uid is " + ctx.uid);
+  const pkt: CmdPacket = { cmd: "setPersonVerified", args: args };
+  ctx.publish(pkt);
+  wait_for_response(ctx.cache, callback, rep);
+})

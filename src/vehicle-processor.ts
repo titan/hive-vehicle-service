@@ -75,13 +75,25 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
         log.info("old perosn: " + pid);
-        await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [name, phone, identity_no]);
-        owner = {
-          id: pid,
-          name: name,
-          identity_no: identity_no,
-          phone: phone
-        };
+        const personValid = await db.query("SELECT 1 FROM person WHERE identity_no = $1 AND deleted = false AND verified = true", [identity_no]);
+        if (personValid["rowCount"] !== 0) {
+          owner = {
+            id: pid,
+            name: person.rows[0]["name"].trim(),
+            identity_no: person.rows[0]["identity_no"].trim(),
+            phone: person.rows[0]["phone"].trim(),
+            verified: true
+          };
+        } else {
+          await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [name, phone, identity_no]);
+          owner = {
+            id: pid,
+            name: name,
+            identity_no: identity_no,
+            phone: phone,
+            verified: false
+          };
+        }
       } else {
         pid = uuid.v1();
         log.info("new perosn: " + pid);
@@ -90,27 +102,10 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
           id: pid,
           name: name,
           identity_no: identity_no,
-          phone: phone
+          phone: phone,
+          verified: false
         };
       }
-      // const vids = await db.query("SELECT id FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-      // let vid = "";
-      // if (vids["rowCount"] !== 0) {
-      //   vid = vids.rows[0]["id"];
-      //   log.info("old vehicle id: " + vid);
-      //   await db.query("UPDATE vehicles SET owner = $1, uid = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
-      //   const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-      //   let vehicle = await msgpack_decode(vehicleJson);
-      //   vehicle["owner"] = owner;
-      //   vehicle["uid"] = uid;
-      //   const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
-      //   if (!userVids.some(id => id === vid)) {
-      //     await cache.lpushAsync("vehicle-" + uid, vid);
-      //   }
-      //   const pkt = await msgpack_encode(vehicle);
-      //   await cache.hsetAsync("vehicle-entities", vid, pkt);
-
-      // } else {
       let vid = uuid.v1();
       log.info("new vehicle id: " + vid);
       await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no,engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16)", [vid, uid, pid, 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status]);
@@ -141,7 +136,6 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
       multi.lpush("vehicle-" + uid, vid);
       multi.lpush("vehicle", vid);
       await multi.execAsync();
-      // }
       await db.query("COMMIT");
       await set_for_response(cache, callback, { code: 200, data: vid });
       done();
@@ -173,13 +167,25 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
       if (person["rowCount"] !== 0) {
         pid = person.rows[0]["id"];
         log.info("old person: " + pid);
-        await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [name, phone, identity_no]);
-        owner = {
-          id: pid,
-          name: name,
-          identity_no: identity_no,
-          phone: phone
-        };
+        const personValid = await db.query("SELECT 1 FROM person WHERE identity_no = $1 AND deleted = false AND verified = true", [identity_no]);
+        if (personValid["rowCount"] !== 0) {
+          owner = {
+            id: pid,
+            name: person.rows[0]["name"].trim(),
+            identity_no: person.rows[0]["identity_no"].trim(),
+            phone: person.rows[0]["phone"].trim(),
+            verified: true
+          };
+        } else {
+          await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [name, phone, identity_no]);
+          owner = {
+            id: pid,
+            name: name,
+            identity_no: identity_no,
+            phone: phone,
+            verified: false
+          };
+        }
       } else {
         pid = uuid.v1();
         log.info("new perosn: " + pid);
@@ -187,27 +193,11 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
           id: pid,
           name: name,
           identity_no: identity_no,
-          phone: phone
+          phone: phone,
+          verified: false
         };
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
-      // const vids = await db.query("SELECT id FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-      // let vid = "";
-      // if (vids["rowCount"] !== 0) {
-      //   vid = vids.rows[0]["id"];
-      //   log.info("old vehicle id: " + vid);
-      //   await db.query("UPDATE vehicles SET owner = $1, uid = $2 WHERE id = $3 AND deleted = false", [pid, uid, vid]);
-      //   const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-      //   let vehicle = await msgpack_decode(vehicleJson);
-      //   vehicle["owner"] = owner;
-      //   vehicle["uid"] = uid;
-      //   const userVids = await cache.lrangeAsync("vehicle-" + uid, 0, -1);
-      //   if (!userVids.some(id => id === vid)) {
-      //     await cache.lpushAsync("vehicle-" + uid, vid);
-      //   }
-      //   const pkt = await msgpack_encode(vehicle);
-      //   await cache.hsetAsync("vehicle-entities", vid, pkt);
-      // } else {
       let vid = uuid.v1();
       log.info("new vehicle id: " + vid);
       await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
@@ -237,7 +227,6 @@ processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: 
       multi.lpush("vehicle-" + uid, vid);
       multi.lpush("vehicle", vid);
       await multi.execAsync();
-      // }
       await db.query("COMMIT");
       await set_for_response(cache, callback, { code: 200, data: vid });
       done();
@@ -270,20 +259,46 @@ processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, 
         if (person["rowCount"] !== 0) {
           let pid = person.rows[0]["id"];
           pids.push(pid);
-          await db.query("UPDATE person SET name = $1 WHERE identity_no = $2 AND deleted = false", [driver["name"], driver["identity_no"]]);
+          const personValid = await db.query("SELECT 1 FROM person WHERE identity_no = $1 AND deleted = false AND verified = true", [driver["identity_no"]]);
+          let dname = "";
+          let didentity_no = "";
+          let dphone = "";
+          if (personValid["rowCount"] !== 0) {
+            dname = person.rows[0]["name"].trim();
+            didentity_no = person.rows[0]["identity_no"].trim();
+            dphone = person.rows[0]["phone"].trim();
+          } else {
+            await db.query("UPDATE person SET name = $1 WHERE identity_no = $2 AND deleted = false", [driver["name"], driver["identity_no"]]);
+            dname = driver["name"];
+            didentity_no = driver["identity_no"];
+            dphone = driver["is_primary"];
+          }
           const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
           if (driverId["rowCount"] === 0) {
             let did = uuid.v4();
             log.info("new driver" + did);
             await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
+            vehicle["drivers"].push({
+              id: pid,
+              name: dname,
+              identity_no: didentity_no,
+              phone: dphone,
+              is_primary: driver["is_primary"]
+            });
+          } else {
+            // update driver info
+            log.info("driver id is " + pid);
+            await db.query("UPDATE drivers SET is_primary = $1", [driver["is_primary"]]);
+            for (let d of vehicle["drivers"]) {
+              if (pid === d["id"]) {
+                d["name"] = dname;
+                d["identity_no"] = didentity_no;
+                d["phone"] = dphone;
+                d["is_primary"] = driver["is_primary"];
+                break;
+              }
+            }
           }
-          vehicle["drivers"].push({
-            id: pid,
-            name: driver["name"],
-            identity_no: driver["identity_no"],
-            phone: driver["phone"],
-            is_primary: driver["is_primary"]
-          });
         } else {
           let pid = uuid.v4();
           let did = uuid.v4();
@@ -436,7 +451,7 @@ function row2vehicle(row: Object) {
   return {
     id: row["id"] ? row["id"].trim() : "",
     uid: row["uid"] ? row["uid"].trim() : "",
-    owner_type: row["owner_type"], 
+    owner_type: row["owner_type"],
     vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
     license_no: row["license_no"] ? row["license_no"].trim() : "",
     engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
@@ -464,6 +479,7 @@ function row2person(row: Object) {
     name: row["name"] ? row["name"].trim() : "",
     identity_no: row["identity_no"] ? row["identity_no"].trim() : "",
     phone: row["phone"] ? row["phone"].trim() : "",
+    verified: row["verified"],
     identity_front_view: row["identity_front_view"] ? row["identity_front_view"].trim() : "",
     identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
     license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
@@ -504,7 +520,7 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
     try {
       // const dbVehicleModel = await db.query("SELECT vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models");
       const dbVehicleModel = await db.query("SELECT vin, vehicles.vehicle_code AS vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type FROM vehicle_models, vehicles WHERE vehicles.vehicle_code = vehicle_models.vehicle_code" + (vid ? " AND vehicles.id = $1" : ""), (vid ? [vid] : []));
-      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_status, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
+      const dbVehicle = await db.query("SELECT v.id AS id, uid, owner, owner_type, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, insurance_due_date, driving_frontal_view, driving_rear_view, recommend, fuel_type, accident_status, vin, v.created_at AS created_at, v.updated_at AS updated_at, p.id AS pid, name, identity_no, phone, verified, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM vehicles AS v, person AS p WHERE p.id = v.owner" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
       const dbDriver = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id ORDER BY v.id");
       let vehicle_models = dbVehicleModel.rows;
       let vehicles = dbVehicle.rows;
@@ -535,7 +551,7 @@ processor.call("refresh", (ctx: ProcessorContext, domain: string, cbflag: string
       }
       let vehicleUsers: Object = {};
       console.log(vehicleJsons.length);
-      for (let vehicle of vehicleJsons ) {
+      for (let vehicle of vehicleJsons) {
         let vehicle_id = vehicle["id"];
         if (vehicleUsers.hasOwnProperty(vehicle["uid"])) {
           if (!vehicleUsers[vehicle["uid"]].some(v => v === vehicle["id"])) {
@@ -607,6 +623,39 @@ processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: O
       log.error(e);
       await db.query("ROLLBACK");
       set_for_response(cache, cbflag, { code: 500, msg: e.message }).then(_ => {
+        done();
+      }).catch(e => {
+        log.error(e);
+        done();
+      });
+    }
+  })();
+});
+
+
+processor.call("setPersonVerified", (ctx: ProcessorContext, identity_no: string, flag: boolean, callback: string) => {
+  log.info("setPersonVerified " + identity_no);
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
+  (async () => {
+    try {
+      let vids = [];
+      await db.query("UPDATE person SET verified = $1 WHERE identity_no = $2 AND deleted = false", [flag, identity_no]);
+      const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1)", [identity_no]);
+      for (let row of vehicles["rows"]){
+        let vehicleBuffer = await cache.hgetAsync("vehicle-entities", row["id"]);
+        let vehicle = await msgpack_decode(vehicleBuffer);
+        vehicle["owner"]["verified"] = flag;
+        vehicleBuffer = await msgpack_encode(vehicle);
+        await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
+        vids.push(row["id"]);
+      }
+      await set_for_response(cache, callback, { code: 200, data: vids });
+      done();
+    } catch (e) {
+      log.error(e);
+      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
         done();
       }).catch(e => {
         log.error(e);
