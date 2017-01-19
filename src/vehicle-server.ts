@@ -384,18 +384,23 @@ server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车
         console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
-          let arg = JSON.parse(chunk.toString());
-          let args = arg.result;
-          if (args) {
-            let callback = uuid.v1();
-            const pkt: CmdPacket = { cmd: "getVehicleModelsByMake", args: [args, vin, callback] };
-            ctx.publish(pkt);
-            wait_for_response(ctx.cache, callback, rep);
-          } else {
-            rep({
-              code: 404,
-              msg: "该车型没找到,请检查VIN码输入是否正确"
-            });
+          try {
+            let arg = JSON.parse(chunk.toString());
+            let args = arg.result;
+            if (args) {
+              let callback = uuid.v1();
+              const pkt: CmdPacket = { cmd: "getVehicleModelsByMake", args: [args, vin, callback] };
+              ctx.publish(pkt);
+              wait_for_response(ctx.cache, callback, rep);
+            } else {
+              rep({
+                code: 404,
+                msg: "该车型没找到,请检查VIN码输入是否正确"
+              });
+            }
+          } catch (e) {
+            log.error(e);
+            rep({ code: 500, msg: "车型查询接口无法连接!"});
           }
         });
         res.on("end", () => {
