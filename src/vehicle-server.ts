@@ -7,18 +7,6 @@ import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
 import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier } from "hive-verify";
 
-declare module "redis" {
-  export interface RedisClient extends NodeJS.EventEmitter {
-    hgetAsync(key: string, field: string): Promise<any>;
-    hincrbyAsync(key: string, field: string, value: number): Promise<any>;
-    setexAsync(key: string, ttl: number, value: string): Promise<any>;
-    zrevrangebyscoreAsync(key: string, start: number, stop: number): Promise<any>;
-  }
-  export interface Multi extends NodeJS.EventEmitter {
-    execAsync(): Promise<any>;
-  }
-}
-
 const allowAll: Permission[] = [["mobile", true], ["admin", true]];
 const mobileOnly: Permission[] = [["mobile", true], ["admin", false]];
 const adminOnly: Permission[] = [["mobile", false], ["admin", true]];
@@ -407,16 +395,28 @@ server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车
             }
           } catch (e) {
             log.error(e);
-            rep({ code: 500, msg: "车型查询接口无法连接!"});
+            ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": e.message }), () => {
+              rep({ code: 500, msg: "车型查询接口无法连接!"});
+            });
           }
         });
         res.on("end", () => {
         });
       });
+      req.setTimeout(60000, () => {
+        ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": "Timeout" }), () => {
+          rep({
+            code: 504,
+            msg: "京友接口超时"
+          });
+        });
+      });
       req.on("error", (e) => {
-        rep({
-          code: 404,
-          msg: "车型没找到"
+        ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": e.message }), () => {
+          rep({
+            code: 404,
+            msg: "车型没找到"
+          });
         });
       });
 
@@ -814,11 +814,22 @@ server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车
                   });
                 }
 
+                req1.setTimeout(60000, () => {
+                  ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }), () => {
+                    rep({
+                      code: 504,
+                      msg: "访问智通接口超时"
+                    });
+                  });
+                });
+
                 req1.on("error", (e) => {
                   log.error(e);
-                  rep({
-                    code: 500,
-                    msg: e.message
+                  ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": e.message }), () => {
+                    rep({
+                      code: 500,
+                      msg: e.message
+                    });
                   });
                 });
               });
@@ -833,11 +844,22 @@ server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车
           }
         });
 
+        req.setTimeout(60000, () => {
+          ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }), () => {
+            rep({
+              code: 504,
+              msg: "访问智通接口超时"
+            });
+          });
+        });
+
         req.on("error", (e) => {
           log.error(e);
-          rep({
-            code: 500,
-            msg: e.message
+          ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": e.message }), () => {
+            rep({
+              code: 500,
+              msg: e.message
+            });
           });
         });
       });
