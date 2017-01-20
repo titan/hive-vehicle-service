@@ -1,6 +1,7 @@
 import { Server, ServerContext, ServerFunction, CmdPacket, Permission, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
 import { Client as PGClient } from "pg";
 import { RedisClient } from "redis";
+import * as crypto from "crypto";
 import * as http from "http";
 import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
@@ -369,7 +370,6 @@ server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车
         "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
       });
       let options = {
-        // hostname:"www.baidu.coddm",
         hostname: "www.jy-epc.com",
         port: 80,
         path: "/api-show/NqAfterMarketDataServlet",
@@ -379,13 +379,20 @@ server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车
           "Content-Length": data.length
         }
       };
+
+      const sn = crypto.randomBytes(8).toString("base64");
+
+      log.info(`jy-epc.com ${sn} request: ${data}`);
+
       let req = http.request(options, (res) => {
         console.log(`STATUS: ${res.statusCode}`);
         console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
+          const content = chunk.toString();
+          log.info(`jy-epc.com ${sn} response: ${content}`);
           try {
-            let arg = JSON.parse(chunk.toString());
+            let arg = JSON.parse(content);
             let args = arg.result;
             if (args) {
               let callback = uuid.v1();
