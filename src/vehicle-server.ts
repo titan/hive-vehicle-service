@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 import * as http from "http";
 import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
-import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier } from "hive-verify";
+import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier, dateVerifier } from "hive-verify";
 
 const allowAll: Permission[] = [["mobile", true], ["admin", true]];
 const mobileOnly: Permission[] = [["mobile", true], ["admin", false]];
@@ -229,35 +229,64 @@ server.call("getDriver", allowAll, "获取驾驶人信息", "获取驾驶人信�
   });
 });
 
-server.call("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车信息上牌车", (ctx: ServerContext, rep: ((result: any) => void), name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: any, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: any, fuel_type: string, vin_code: string, accident_status: number) => {
-  log.info("setVehicleOnCard: " + ctx.uid);
-  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("license_no", license_no), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code), numberVerifier("accident_status", accident_status)], (errors: string[]) => {
-    log.info(errors);
-    rep({
+server.callAsync("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin_code: string, accident_status: number) => {
+  log.info(`setVehicleOnCard, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin_code: ${vin_code}, accident_status: ${accident_status}`);
+  try {
+    verify([
+      uuidVerifier("uid", ctx.uid),
+      stringVerifier("owner_name", owner_name),
+      stringVerifier("owner_identity_no", owner_identity_no),
+      stringVerifier("owner_phone", owner_phone),
+      stringVerifier("applicant_name", applicant_name),
+      stringVerifier("applicant_identity_no", applicant_identity_no),
+      stringVerifier("applicant_phone", applicant_phone),
+      stringVerifier("vehicle_code", vehicle_code),
+      stringVerifier("license_no", license_no),
+      stringVerifier("engine_no", engine_no),
+      stringVerifier("average_mileage", average_mileage),
+      booleanVerifier("is_transfer", is_transfer),
+      stringVerifier("vin_code", vin_code),
+      numberVerifier("accident_status", accident_status),
+      dateVerifier("register_date", register_date),
+      dateVerifier("insurance_due_date", insurance_due_date),
+    ]);
+  } catch (e) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: e.message,
+    };
   }
-  let uid = ctx.uid;
-  let callback = uuid.v1();
-  let vin = vin_code.toUpperCase();
-  let uengine_no = engine_no.toUpperCase();
-  let ulicense_no = license_no.toUpperCase();
-  let args = [
-    name, identity_no, phone, uid, recommend, vehicle_code, ulicense_no, uengine_no,
-    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, callback
+  const uid = ctx.uid;
+  const vin = vin_code.toUpperCase();
+  const uengine_no = engine_no.toUpperCase();
+  const ulicense_no = license_no.toUpperCase();
+  const args = [
+    uid, owner_name, owner_identity_no, owner_phone, applicant_name, applicant_identity_no, applicant_phone, recommend, vehicle_code, ulicense_no, uengine_no,
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status
   ];
   const pkt: CmdPacket = { cmd: "setVehicleOnCard", args: args };
   ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
+  return waitingAsync(ctx);
 });
 
 server.callAsync("setVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
   log.info(`setVehicle, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin_code: ${vin_code}`);
   try {
-    verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", owner_name), stringVerifier("identity_no", owner_identity_no), stringVerifier("phone", owner_phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)]);
+    verify([
+      uuidVerifier("uid", ctx.uid),
+      stringVerifier("owner_name", owner_name),
+      stringVerifier("owner_identity_no", owner_identity_no),
+      stringVerifier("owner_phone", owner_phone),
+      stringVerifier("applicant_name", applicant_name),
+      stringVerifier("applicant_identity_no", applicant_identity_no),
+      stringVerifier("applicant_phone", applicant_phone),
+      stringVerifier("vehicle_code", vehicle_code),
+      stringVerifier("engine_no", engine_no),
+      stringVerifier("average_mileage", average_mileage),
+      booleanVerifier("is_transfer", is_transfer),
+      stringVerifier("vin_code", vin_code),
+      dateVerifier("receipt_date", receipt_date),
+    ]);
   } catch (e) {
     return {
       code: 400,
