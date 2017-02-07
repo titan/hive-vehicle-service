@@ -6,20 +6,6 @@ import * as http from "http";
 import * as bluebird from "bluebird";
 import * as bunyan from "bunyan";
 
-declare module "redis" {
-  export interface RedisClient extends NodeJS.EventEmitter {
-    hgetAsync(key: string, field: string): Promise<any>;
-    hsetAsync(key: string, field: string, field2: any): Promise<any>;
-    hincrbyAsync(key: string, field: string, value: number): Promise<any>;
-    setexAsync(key: string, ttl: number, value: string): Promise<any>;
-    lpushAsync(key: string, field: string): Promise<any>;
-    lrangeAsync(key: string, field: number, field2: number): Promise<any>;
-  }
-  export interface Multi extends NodeJS.EventEmitter {
-    execAsync(): Promise<any>;
-  }
-}
-
 let log = bunyan.createLogger({
   name: "vehicle-processor",
   streams: [
@@ -41,23 +27,6 @@ let log = bunyan.createLogger({
 });
 
 export const processor = new Processor();
-
-// interface InsertDriverCtx {
-//   pids: any;
-//   dids: any;
-//   vid: string;
-//   cache: RedisClient;
-//   db: PGClient;
-//   done: DoneFunction;
-// }
-
-// interface InsertModelCtx {
-//   cache: RedisClient;
-//   db: PGClient;
-//   done: DoneFunction;
-//   vin: string;
-//   models: Object[];
-// };
 
 // 新车已上牌个人
 processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string,
@@ -153,94 +122,41 @@ processor.call("setVehicleOnCard", (ctx: ProcessorContext, name: string, identit
 });
 
 // 新车未上牌个人
-processor.call("setVehicle", (ctx: ProcessorContext, name: string, identity_no: string, phone: string, uid: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string, callback: string) => {
-  log.info("setVehicle");
+processor.callAsync("setVehicle", async (ctx: ProcessorContext, uid: string, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string) => {
+  log.info(`setVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
-  (async () => {
-    try {
-      let pid = "";
-      let owner = {};
-      await db.query("BEGIN");
-      const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
-      if (person["rowCount"] !== 0) {
-        pid = person.rows[0]["id"];
-        log.info("old person: " + pid);
-        const personValid = await db.query("SELECT 1 FROM person WHERE identity_no = $1 AND deleted = false AND verified = true", [identity_no]);
-        if (personValid["rowCount"] !== 0) {
-          owner = {
-            id: pid,
-            name: person.rows[0]["name"].trim(),
-            identity_no: person.rows[0]["identity_no"].trim(),
-            phone: person.rows[0]["phone"].trim(),
-            verified: true
-          };
-        } else {
+  try {
+    const pids = [];
+    const params = [[owner_identity_no, owner_name, owner_phone], [applicant_identity_no, applicant_name, applicant_phone]];
+    await db.query("BEGIN");
+    for (const param of params) {
+      const identity_no = param[0];
+      const name = param[1];
+      const phone = param[2];
+      const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+      if (presult["rowCount"] !== 0) {
+        const pid = presult.rows[0]["id"];
+        if (!presult.rows[0].verified) {
           await db.query("UPDATE person SET name = $1, phone = $2 WHERE identity_no = $3 AND deleted = false", [name, phone, identity_no]);
-          owner = {
-            id: pid,
-            name: name,
-            identity_no: identity_no,
-            phone: phone,
-            verified: false
-          };
         }
+        pids.push(pid);
       } else {
-        pid = uuid.v1();
-        log.info("new perosn: " + pid);
-        owner = {
-          id: pid,
-          name: name,
-          identity_no: identity_no,
-          phone: phone,
-          verified: false
-        };
+        const pid = uuid.v1();
         await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
+        pids.push(pid);
       }
-      let vid = uuid.v1();
-      log.info("new vehicle id: " + vid);
-      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, pid, 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin]);
-      let vehicle = {
-        id: vid,
-        uid: uid,
-        owner: owner,
-        owner_type: 0,
-        recommend: recommend,
-        drivers: [],
-        vehicle_code: vehicle_code,
-        vin_code: vin,
-        engine_no: engine_no,
-        license_no: null,
-        average_mileage: average_mileage,
-        is_transfer: is_transfer,
-        receipt_no: receipt_no,
-        receipt_date: receipt_date,
-        last_insurance_company: last_insurance_company,
-        fuel_type: fuel_type
-      };
-      const vehicle_model_json = await cache.hgetAsync("vehicle-model-entities", vehicle_code);
-      vehicle["vehicle_model"] = await msgpack_decode(vehicle_model_json);
-      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-      const pkt = await msgpack_encode(vehicle);
-      multi.hset("vehicle-entities", vid, pkt);
-      multi.lpush("vehicle-" + uid, vid);
-      multi.lpush("vehicle", vid);
-      await multi.execAsync();
-      await db.query("COMMIT");
-      await set_for_response(cache, callback, { code: 200, data: vid });
-      done();
-    } catch (e) {
-      log.error(e);
-      await db.query("ROLLBACK");
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
     }
-  })();
+    const vid = uuid.v1();
+    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin, applicant) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15)", [vid, uid, pids[0], 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin, pids[1]]);
+    sync_vehicle(db, cache, vid);
+    await db.query("COMMIT");
+    return { code: 200, data: vid };
+  } catch (e) {
+    log.error(e);
+    await db.query("ROLLBACK");
+    return { code: 500, msg: e.message };
+  }
 });
 
 processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, callback: string) => {
@@ -664,3 +580,6 @@ processor.call("setPersonVerified", (ctx: ProcessorContext, identity_no: string,
     }
   })();
 });
+
+function sync_vehicle(db: PGClient, cache: RedisClient, vid: string) {
+}

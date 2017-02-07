@@ -1,4 +1,4 @@
-import { Server, ServerContext, ServerFunction, CmdPacket, Permission, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
+import { Server, ServerContext, ServerFunction, CmdPacket, Permission, waitingAsync, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
 import { Client as PGClient } from "pg";
 import { RedisClient } from "redis";
 import * as crypto from "crypto";
@@ -254,26 +254,24 @@ server.call("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车
   wait_for_response(ctx.cache, callback, rep);
 });
 
-server.call("setVehicle", allowAll, "添加车信息", "添加车信息", (ctx: ServerContext, rep: ((result: any) => void), name: string, identity_no: string, phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
-  log.info("setVehicle: " + ctx.uid);
-  if (!verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", name), stringVerifier("identity_no", identity_no), stringVerifier("phone", phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)], (errors: string[]) => {
-    log.info(errors);
-    rep({
+server.callAsync("setVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
+  log.info(`setVehicle, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin_code: ${vin_code}`);
+  try {
+    verify([uuidVerifier("uid", ctx.uid), stringVerifier("name", owner_name), stringVerifier("identity_no", owner_identity_no), stringVerifier("phone", owner_phone), stringVerifier("vehicle_code", vehicle_code), stringVerifier("engine_no", engine_no), stringVerifier("average_mileage", average_mileage), booleanVerifier("is_transfer", is_transfer), stringVerifier("vin_code", vin_code)]);
+  } catch (e) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: e.message,
+    };
   }
-  let vin = vin_code.toUpperCase();
-  let uid = ctx.uid;
-  let callback = uuid.v1();
-  let uengine_no = engine_no.toUpperCase();
-  let ureceipt_no = receipt_no.toUpperCase();
-  let args = [name, identity_no, phone, uid, recommend, vehicle_code, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin, callback];
+  const vin = vin_code.toUpperCase();
+  const uid = ctx.uid;
+  const uengine_no = engine_no.toUpperCase();
+  const ureceipt_no = receipt_no.toUpperCase();
+  const args = [uid, owner_name, owner_identity_no, owner_phone, applicant_name, applicant_identity_no, applicant_phone, recommend, vehicle_code, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin];
   const pkt: CmdPacket = { cmd: "setVehicle", args: args };
   ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
+  return waitingAsync(ctx);
 });
 
 server.call("addDrivers", allowAll, "添加驾驶员信息", "添加驾驶员信息", (ctx: ServerContext, rep: ((result: any) => void), vid: string, drivers: any[]) => {
