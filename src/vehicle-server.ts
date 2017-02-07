@@ -1,4 +1,4 @@
-import { Server, ServerContext, ServerFunction, CmdPacket, Permission, waitingAsync, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
+import { Server, ServerContext, ServerFunction, CmdPacket, Permission, waiting, waitingAsync, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
 import { Client as PGClient } from "pg";
 import { RedisClient } from "redis";
 import * as crypto from "crypto";
@@ -554,10 +554,9 @@ function ids2objects(cache: RedisClient, key: string, ids: string[], rep: ((resu
 
 server.call("refresh", allowAll, "refresh", "refresh", (ctx: ServerContext, rep: ((result: any) => void), vid?: string) => {
   log.info(`refresh, vehicle id is ${vid}`);
-  let cbflag = uuid.v1();
-  const pkt: CmdPacket = { cmd: "refresh", args: vid ? ["admin", cbflag, vid] : ["admin", cbflag] };
+  const pkt: CmdPacket = { cmd: "refresh", args: vid ? ["admin", vid] : ["admin"] };
   ctx.publish(pkt);
-  wait_for_response(ctx.cache, cbflag, rep);
+  waiting(ctx, rep);
 });
 
 const provinces: Object = {
