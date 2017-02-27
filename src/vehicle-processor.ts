@@ -28,14 +28,66 @@ let log = bunyan.createLogger({
 
 export const processor = new Processor();
 
+// 获取车型信息(NEW)
+processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, args: any, vin: string) => {
+  log.info(`createVehicle, vin: ${vin}`);
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  try {
+    await db.query("BEGIN");
+    let models = args;
+    for (let model of models) {
+      let dbmodel = await db.query("SELECT * FROM vehicle_models WHERE code = $1", [model["vehicle_code"]]);
+      if (dbmodel["rowCount"] === 0) {
+        const vmodel = {
+          vehicle_name: model["vehicle_name"],
+          brand_name: model["brand_name"],
+          family_name: model["family_name"],
+          body_type: model["body_type"],
+          engine_desc: model["engine_desc"],
+          gearbox_name: model["gearbox_name"],
+          year_pattern: model["year_pattern"],
+          group_name: model["group_name"],
+          cfg_level: model["cfg_level"],
+          purchase_price: model["purchase_price"],
+          purchase_price_tax: model["purchase_price_tax"],
+          seat: model["seat"],
+          effluent_standard: model["effluent_standard"],
+          pl: model["pl"],
+          fuel_jet_type: model["fuel_jet_type"],
+          driven_type: model["driven_type"]
+        };
+        await db.query("INSERT INTO vehicle_models(code, data) VALUES($1, $2)", [model["vehicle_code"], vmodel]);
+      }
+    }
+    await db.query("COMMIT");
+    let multi = bluebird.promisifyAll(cache.multi()) as Multi;
+    let codes = [];
+    for (let model of models) {
+      // model["vin_code"] = vin;
+      const pkt = await msgpack_encode(model);
+      multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
+      codes.push(model["vehicle_code"]);
+    }
+    multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
+    multi.sadd("vehicle-model", vin);
+    await multi.execAsync();
+    return { code: 200, data: args };
+  } catch (e) {
+    log.error(e);
+    await db.query("ROLLBACK");
+    return { code: 500, msg: e.message };
+  }
+});
+
 // 新车已上牌个人
-processor.call("setVehicleOnCard", async (ctx: ProcessorContext, uid: string, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
-  log.info(`setVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
+processor.callAsync("createVehicle", async (ctx: ProcessorContext, uid: string, owner_name: string, owner_identity_no: string, owner_phone: string, insured_name: string, insured_identity_no: string, insured_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
+  log.info(`createVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     const pids = [];
-    const params = [[owner_identity_no, owner_name, owner_phone], [applicant_identity_no, applicant_name, applicant_phone]];
+    const params = [[owner_identity_no, owner_name, owner_phone], [insured_identity_no, insured_name, insured_phone]];
     await db.query("BEGIN");
     for (const param of params) {
       const identity_no = param[0];
@@ -55,9 +107,9 @@ processor.call("setVehicleOnCard", async (ctx: ProcessorContext, uid: string, ow
       }
     }
     const vid = uuid.v1();
-    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no,engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, applicant) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16, $17)", [vid, uid, pids[0], 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, pids[1]]);
+    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no,engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16, $17)", [vid, uid, pids[0], 0, recommend, vehicle_code, license_no, engine_no, register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, pids[1]]);
     await db.query("COMMIT");
-    sync_vehicle(db, cache, vid);
+    await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (e) {
     log.error(e);
@@ -67,13 +119,13 @@ processor.call("setVehicleOnCard", async (ctx: ProcessorContext, uid: string, ow
 });
 
 // 新车未上牌个人
-processor.callAsync("setVehicle", async (ctx: ProcessorContext, uid: string, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string) => {
-  log.info(`setVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`);
+processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, uid: string, owner_name: string, owner_identity_no: string, owner_phone: string, insured_name: string, insured_identity_no: string, insured_phone: string, recommend: string, vehicle_code: string, engine_no: string, average_mileage: string, is_transfer: boolean, receipt_no: string, receipt_date: any, last_insurance_company: string, fuel_type: string, vin: string) => {
+  log.info(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     const pids = [];
-    const params = [[owner_identity_no, owner_name, owner_phone], [applicant_identity_no, applicant_name, applicant_phone]];
+    const params = [[owner_identity_no, owner_name, owner_phone], [insured_identity_no, insured_name, insured_phone]];
     await db.query("BEGIN");
     for (const param of params) {
       const identity_no = param[0];
@@ -93,9 +145,9 @@ processor.callAsync("setVehicle", async (ctx: ProcessorContext, uid: string, own
       }
     }
     const vid = uuid.v1();
-    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no,average_mileage,is_transfer,receipt_no, receipt_date,last_insurance_company, fuel_type, vin, applicant) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15)", [vid, uid, pids[0], 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin, pids[1]]);
+    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date,last_insurance_company, fuel_type, vin, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15)", [vid, uid, pids[0], 0, recommend, vehicle_code, engine_no, average_mileage, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin, pids[1]]);
     await db.query("COMMIT");
-    sync_vehicle(db, cache, vid);
+    await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (e) {
     log.error(e);
@@ -104,263 +156,101 @@ processor.callAsync("setVehicle", async (ctx: ProcessorContext, uid: string, own
   }
 });
 
-processor.call("addDrivers", (ctx: ProcessorContext, vid: string, drivers: any, callback: string) => {
-  log.info("addDrivers " + vid);
+processor.callAsync("uploadImages", async (ctx: ProcessorContext, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
+  log.info("uploadImages");
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
-  (async () => {
-    try {
-      let pids = [];
-      await db.query("BEGIN");
-      let vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-      let vehicle = await msgpack_decode(vehicleJson);
-      for (let driver of drivers) {
-        const person = await db.query("SELECT id, name, identity_no, phone FROM person WHERE identity_no = $1 AND deleted = false", [driver["identity_no"]]);
-        if (person["rowCount"] !== 0) {
-          let pid = person.rows[0]["id"];
-          pids.push(pid);
-          const personValid = await db.query("SELECT 1 FROM person WHERE identity_no = $1 AND deleted = false AND verified = true", [driver["identity_no"]]);
-          let dname = "";
-          let didentity_no = "";
-          let dphone = "";
-          if (personValid["rowCount"] !== 0) {
-            dname = person.rows[0]["name"].trim();
-            didentity_no = person.rows[0]["identity_no"].trim();
-            dphone = person.rows[0]["phone"].trim();
-          } else {
-            await db.query("UPDATE person SET name = $1 WHERE identity_no = $2 AND deleted = false", [driver["name"], driver["identity_no"]]);
-            dname = driver["name"];
-            didentity_no = driver["identity_no"];
-            dphone = driver["is_primary"];
-          }
-          const driverId = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2 AND deleted = false", [pid, vid]);
-          if (driverId["rowCount"] === 0) {
-            let did = uuid.v4();
-            log.info("new driver" + did);
-            await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
-            vehicle["drivers"].push({
-              id: pid,
-              name: dname,
-              identity_no: didentity_no,
-              phone: dphone,
-              is_primary: driver["is_primary"]
-            });
-          } else {
-            // update driver info
-            log.info("driver id is " + pid);
-            await db.query("UPDATE drivers SET is_primary = $1", [driver["is_primary"]]);
-            for (let d of vehicle["drivers"]) {
-              if (pid === d["id"]) {
-                d["name"] = dname;
-                d["identity_no"] = didentity_no;
-                d["phone"] = dphone;
-                d["is_primary"] = driver["is_primary"];
-                break;
-              }
-            }
-          }
-        } else {
-          let pid = uuid.v4();
-          let did = uuid.v4();
-          log.info("new person and new dirver " + pid + " and " + did);
-          pids.push(pid);
-          await db.query("INSERT INTO person (id, name, identity_no,phone) VALUES ($1, $2, $3, $4)", [pid, driver["name"], driver["identity_no"], driver["phone"]]);
-          await db.query("INSERT INTO drivers (id, vid, pid, is_primary) VALUES ($1, $2, $3, $4)", [did, vid, pid, driver["is_primary"]]);
-          vehicle["drivers"].push({
-            id: pid,
-            name: driver["name"],
-            identity_no: driver["identity_no"],
-            phone: driver["phone"],
-            is_primary: driver["is_primary"]
-          });
-        }
+  try {
+    await db.query("BEGIN");
+    await db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid]);
+    await db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid]);
+    for (let key in license_frontal_views) {
+      if (license_frontal_views.hasOwnProperty(key)) {
+        await db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key]);
       }
-      await db.query("COMMIT");
-      const pkt = await msgpack_encode(vehicle);
-      await cache.hsetAsync("vehicle-entities", vid, pkt);
-      log.info("pids ==> " + pids);
-      await set_for_response(cache, callback, { code: 200, data: pids });
-      done();
-    } catch (e) {
-      log.error(e);
-      await db.query("ROLLBACK");
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
     }
-  })();
-});
-
-processor.call("uploadDriverImages", (ctx: ProcessorContext, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object, callback: string) => {
-  log.info("uploadDriverImages");
-  const db: PGClient = ctx.db;
-  const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
-  (async () => {
-    try {
-      await db.query("BEGIN");
-      await db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2 WHERE id = $3", [driving_frontal_view, driving_rear_view, vid]);
-      await db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2 WHERE id in (SELECT owner FROM vehicles WHERE id = $3)", [identity_frontal_view, identity_rear_view, vid]);
-      for (let key in license_frontal_views) {
-        if (license_frontal_views.hasOwnProperty(key)) {
-          await db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key]);
+    await db.query("COMMIT");
+    const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
+    let vehicle = await msgpack_decode(vehicleJson);
+    vehicle["driving_frontal_view"] = driving_frontal_view;
+    vehicle["driving_rear_view"] = driving_rear_view;
+    vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
+    vehicle["owner"]["identity_rear_view"] = identity_rear_view;
+    vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
+    for (let key in license_frontal_views) {
+      for (let driver of vehicle["drivers"]) {
+        if (driver["id"] === key) {
+          driver["license_view"] = license_frontal_views[key];
         }
       }
-      await db.query("COMMIT");
-      const vehicleJson = await cache.hgetAsync("vehicle-entities", vid);
-      let vehicle = await msgpack_decode(vehicleJson);
-      vehicle["driving_frontal_view"] = driving_frontal_view;
-      vehicle["driving_rear_view"] = driving_rear_view;
-      vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
-      vehicle["owner"]["identity_rear_view"] = identity_rear_view;
-      vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
-      for (let key in license_frontal_views) {
-        for (let driver of vehicle["drivers"]) {
-          if (driver["id"] === key) {
-            driver["license_view"] = license_frontal_views[key];
-          }
-        }
-      }
-      const pkt = await msgpack_encode(vehicle);
-      await cache.hsetAsync("vehicle-entities", vid, pkt);
-      await set_for_response(cache, callback, { code: 200, data: vid });
-      done();
-    } catch (e) {
-      log.error(e);
-      await db.query("ROLLBACK");
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
     }
-  })();
-});
-
-processor.call("getVehicleModelsByMake", (ctx: ProcessorContext, args2: any, vin: string, callback: string) => {
-  log.info("getVehicleModelsByMake " + vin);
-  const db: PGClient = ctx.db;
-  const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
-  (async () => {
-    try {
-      await db.query("BEGIN");
-      let models = args2.vehicleList.map(e => e);
-      for (let model of models) {
-        let dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
-        if (dbmodel["rowCount"] === 0) {
-          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
-        }
-      }
-      await db.query("COMMIT");
-      let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-      let codes = [];
-      for (let model of models) {
-        model["vin_code"] = vin;
-        const pkt = await msgpack_encode(model);
-        multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
-        codes.push(model["vehicleCode"]);
-      }
-      multi.hset("vehicle-vin-codes", vin, JSON.stringify(codes));
-      multi.sadd("vehicle-model", vin);
-      await multi.execAsync();
-      await set_for_response(cache, callback, { code: 200, data: args2.vehicleList });
-      done();
-      log.info("getVehicleModelsByMake success");
-    } catch (e) {
-      log.error(e);
-      await db.query("ROLLBACK");
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
-    }
-  })();
+    const pkt = await msgpack_encode(vehicle);
+    await cache.hsetAsync("vehicle-entities", vid, pkt);
+    return { code: 200, data: vid };
+  } catch (e) {
+    log.error(e);
+    await db.query("ROLLBACK");
+    return { code: 500, msg: e.message };
+  }
 });
 
 function row2model(row: Object) {
   return {
-    vehicleCode: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
-    vehicleName: row["vehicle_name"] ? row["vehicle_name"].trim() : "",
-    brandName: row["brand_name"] ? row["brand_name"].trim() : "",
-    familyName: row["family_name"] ? row["family_name"].trim() : "",
-    bodyType: row["body_type"] ? row["body_type"].trim() : "",
-    engineDesc: row["engine_desc"] ? row["engine_desc"].trim() : "",
-    gearboxName: row["gearbox_name"] ? row["gearbox_name"].trim() : "",
-    yearPattern: row["yearPattern"] ? row["yearPattern"].trim() : "",
-    groupName: row["group_name"] ? row["group_name"].trim() : "",
-    cfgLevel: row["cfg_level"] ? row["cfg_level"].trim() : "",
-    purchasePrice: row["purchase_price"],
-    purchasePriceTax: row["purchase_price_tax"],
-    seat: row["seat"],
-    effluentStandard: row["effluent_standard"] ? row["effluent_standard"].trim() : "",
-    pl: row["pl"] ? row["pl"].trim() : "",
-    fuelJetType: row["fuel_jet_type"] ? row["fuel_jet_type"].trim() : "",
-    drivenType: row["driven_type"] ? row["driven_type"].trim() : ""
+    vehicle_code: trim(row["vehicle_code"]),
+    vehicle_name: trim(row["vmodel"]["vehicle_name"]),
+    brand_name: trim(row["vmodel"]["brand_name"]),
+    family_name: trim(row["vmodel"]["family_name"]),
+    body_type: trim(row["vmodel"]["body_type"]),
+    engine_desc: trim(row["vmodel"]["engine_desc"]),
+    gearbox_name: trim(row["vmodel"]["gearbox_name"]),
+    year_pattern: trim(row["vmodel"]["year_pattern"]),
+    group_name: trim(row["vmodel"]["group_name"]),
+    cfg_level: trim(row["vmodel"]["cfg_level"]),
+    purchase_price: row["vmodel"]["purchase_price"],
+    purchase_price_tax: row["vmodel"]["purchase_price_tax"],
+    seat: row["vmodel"]["seat"],
+    effluent_standard: trim(row["vmodel"]["effluent_standard"]),
+    pl: trim(row["vmodel"]["pl"]),
+    fuelJet_type: trim(row["vmodel"]["fuel_jet_type"]),
+    driven_type: trim(row["vmodel"]["driven_type"])
   };
 }
 
 function row2vehicle(row: Object) {
   return {
-    id: row["id"] ? row["id"].trim() : "",
-    uid: row["uid"] ? row["uid"].trim() : "",
-    owner_type: row["owner_type"],
-    vehicle_code: row["vehicle_code"] ? row["vehicle_code"].trim() : "",
-    license_no: row["license_no"] ? row["license_no"].trim() : "",
-    engine_no: row["engine_no"] ? row["engine_no"].trim() : "",
+    id: trim(row["id"]),
+    vin: trim(row["vin"]),
+    user_id: trim(row["uid"]),
+    recommend: trim(row["recommend"]),
+    license_no: trim(row["license_no"]),
+    engine_no: trim(row["engine_no"]),
     register_date: row["register_date"],
-    average_mileage: row["average_mileage"] ? row["average_mileage"].trim() : "",
+    average_mileage: trim(row["average_mileage"]),
     is_transfer: row["is_transfer"],
-    receipt_no: row["receipt_no"] ? row["receipt_no"].trim() : "",
+    receipt_no: trim(row["receipt_no"]),
     receipt_date: row["receipt_date"],
-    last_insurance_company: row["last_insurance_company"] ? row["last_insurance_company"].trim() : "",
+    last_insurance_company: trim(row["last_insurance_company"]),
     insurance_due_date: row["insurance_due_date"],
-    driving_frontal_view: row["driving_frontal_view"] ? row["driving_frontal_view"].trim() : "",
-    driving_real_view: row["driving_real_view"] ? row["driving_real_view"].trim() : "",
-    recommend: row["recommend"] ? row["recommend"].trim() : "",
-    fuel_type: row["fuel_type"] ? row["fuel_type"].trim() : "",
-    accident_status: row["accident_status"],
-    vin_code: row["vin"] ? row["vin"].trim() : "",
-    vin: row["vin"] ? row["vin"].trim() : "",
-    created_at: row["created_at"],
-    updated_at: row["updated_at"],
+    driving_frontal_view: trim(row["driving_frontal_view"]),
+    driving_real_view: trim(row["driving_real_view"]),
+    accident_status: row["accident_status"]
   };
 }
 
 function row2person(row: Object) {
   return {
-    id: row["pid"] ? row["pid"].trim() : "",
-    name: row["name"] ? row["name"].trim() : "",
-    identity_no: row["identity_no"] ? row["identity_no"].trim() : "",
-    phone: row["phone"] ? row["phone"].trim() : "",
-    verified: row["verified"],
-    identity_front_view: row["identity_front_view"] ? row["identity_front_view"].trim() : "",
-    identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
-    license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
-    license_rear_view: row["license_rear_view"] ? row["license_rear_view"].trim() : "",
-  };
-}
-
-function row2driver(row: Object) {
-  return {
-    id: row["pid"] ? row["pid"].trim() : "",
-    name: row["name"] ? row["name"].trim() : "",
-    identity_no: row["identity_no"] ? row["identity_no"].trim() : "",
-    phone: row["phone"] ? row["phone"].trim() : "",
-    identity_front_view: row["identity_front_view"] ? row["identity_front_view"].trim() : "",
-    identity_rear_view: row["identity_rear_view"] ? row["identity_rear_view"].trim() : "",
-    license_frontal_view: row["license_frontal_view"] ? row["license_frontal_view"].trim() : "",
-    license_rear_view: row["license_rear_view"] ? row["license_rear_view"].trim() : "",
-    is_primary: row["is_primary"],
-    created_at: row["created_at"],
-    updated_at: row["updated_at"],
+    id: trim(row["pid"]),
+    name: trim(row["name"]),
+    identity_no: trim(row["identity_no"]),
+    phone: trim(row["phone"]),
+    email: trim(row["email"]),
+    address: trim(row["address"]),
+    identity_front_view: trim(row["identity_front_view"]),
+    identity_rear_view: trim(row["identity_rear_view"]),
+    license_frontal_view: trim(row["license_frontal_view"]),
+    license_rear_view: trim(row["license_rear_view"]),
+    verified: row["verified"]
   };
 }
 
@@ -368,119 +258,173 @@ function trim(str: string) {
   if (str) {
     return str.trim();
   } else {
-    return null;
+    return "";
   }
 }
 
-processor.call("refresh", (ctx: ProcessorContext, vid?: string) => {
+processor.callAsync("refresh", async (ctx: ProcessorContext, vid?: string) => {
   log.info("refresh vid is " + vid);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  sync_vehicle(db, cache, vid);
+  await sync_vehicle(ctx, db, cache, vid);
+  return { code: 200, data: "Okay" };
 });
 
-processor.call("addVehicleModels", (ctx: ProcessorContext, vehicle_and_models: Object, cbflag: string) => {
+processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_and_models: Object, cbflag: string) => {
   log.info(`addVehicleModels, vehicle_and_models: ${JSON.stringify(vehicle_and_models)}, cbflag: ${cbflag}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
-  (async () => {
-    try {
-      await db.query("BEGIN");
-      const vehicle_models = vehicle_and_models["std_models"];
-      for (const model of vehicle_models) {
-        const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE vehicle_code = $1", [model["vehicleCode"]]);
-        if (dbmodel["rowCount"] === 0) {
-          await db.query("INSERT INTO vehicle_models(vehicle_code, vehicle_name, brand_name, family_name, body_type, engine_desc, gearbox_name, year_pattern, group_name, cfg_level, purchase_price, purchase_price_tax, seat, effluent_standard, pl, fuel_jet_type, driven_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14, $15, $16, $17)", [model["vehicleCode"], model["vehicleName"], model["brandName"], model["familyName"], model["bodyType"], model["engineDesc"], model["gearboxName"], model["yearPattern"], model["groupName"], model["cfgLevel"], model["purchasePrice"], model["purchasePriceTax"], model["seat"], model["effluentStandard"], model["pl"], model["fuelJetType"], model["drivenType"]]);
-        }
+  try {
+    await db.query("BEGIN");
+    const vehicle_models = vehicle_and_models["models"];
+    for (const model of vehicle_models) {
+      const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE code = $1", [model["vehicle_code"]]);
+      const vmodel = {
+        vehicle_name: model["vehicle_name"],
+        brand_name: model["brand_name"],
+        family_name: model["family_name"],
+        body_type: model["body_type"],
+        engine_desc: model["engine_desc"],
+        gearbox_name: model["gearbox_name"],
+        year_pattern: model["year_pattern"],
+        group_name: model["group_name"],
+        cfg_level: model["cfg_level"],
+        purchase_price: model["purchase_price"],
+        purchase_price_tax: model["purchase_price_tax"],
+        seat: model["seat"],
+        effluent_standard: model["effluent_standard"],
+        pl: model["pl"],
+        fuel_jet_type: model["fuel_jet_type"],
+        driven_type: model["driven_type"]
+      };
+      if (dbmodel["rowCount"] === 0) {
+        await db.query("INSERT INTO vehicle_models(code, data) VALUES($1, $2)", [model["vehicle_code"], vmodel]);
       }
-      await db.query("COMMIT");
-      const multi = bluebird.promisifyAll(cache.multi()) as Multi;
-      const codes = [];
-      for (const model of vehicle_models) {
-        const pkt = await msgpack_encode(model);
-        multi.hset("vehicle-model-entities", model["vehicleCode"], pkt);
-      }
-      await multi.execAsync();
-      const license = vehicle_and_models["licenseNo"];
-      const pkt = await msgpack_encode(vehicle_and_models);
-      await cache.hsetAsync("license-vehicle-models", license, pkt);
-      await set_for_response(cache, cbflag, { code: 200, data: vehicle_and_models });
-      done();
-      log.info("addVehicleModels success");
-    } catch (e) {
-      log.error(e);
-      await db.query("ROLLBACK");
-      set_for_response(cache, cbflag, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
     }
-  })();
+    await db.query("COMMIT");
+    const multi = bluebird.promisifyAll(cache.multi()) as Multi;
+    const codes = [];
+    for (const model of vehicle_models) {
+      const pkt = await msgpack_encode(model);
+      // multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
+      multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
+    }
+    await multi.execAsync();
+    const license = vehicle_and_models["vehicle"]["license_no"];
+    const vin = vehicle_and_models["vehicle"]["vin"];
+    const response_no = vehicle_and_models["response_no"];
+    await cache.hsetAsync("vehicle-license-vin", license, vin);
+    await cache.setAsync(`zt-response-code:${license}`, response_no);
+    // TODO 是否存vehicle信息
+
+    // const pkt = await msgpack_encode(vehicle_and_models);
+    // await cache.hsetAsync("license-vehicle-models", license, pkt);
+    log.info("addVehicleModels success");
+    return { code: 200, data: vehicle_and_models };
+  } catch (e) {
+    log.error(e);
+    await db.query("ROLLBACK");
+    return { code: 500, msg: e.message };
+  }
 });
 
 
-processor.call("setPersonVerified", (ctx: ProcessorContext, identity_no: string, flag: boolean, callback: string) => {
+processor.callAsync("setPersonVerified", async (ctx: ProcessorContext, identity_no: string, flag: boolean, callback: string) => {
   log.info("setPersonVerified " + identity_no);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   const done = ctx.done;
-  (async () => {
-    try {
-      let vids = [];
-      await db.query("UPDATE person SET verified = $1 WHERE identity_no = $2 AND deleted = false", [flag, identity_no]);
-      const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1)", [identity_no]);
-      for (let row of vehicles["rows"]){
-        let vehicleBuffer = await cache.hgetAsync("vehicle-entities", row["id"]);
-        let vehicle = await msgpack_decode(vehicleBuffer);
-        vehicle["owner"]["verified"] = flag;
-        vehicleBuffer = await msgpack_encode(vehicle);
-        await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
-        vids.push(row["id"]);
-      }
-      await set_for_response(cache, callback, { code: 200, data: vids });
-      done();
-    } catch (e) {
-      log.error(e);
-      set_for_response(cache, callback, { code: 500, msg: e.message }).then(_ => {
-        done();
-      }).catch(e => {
-        log.error(e);
-        done();
-      });
+  try {
+    let vids = [];
+    await db.query("UPDATE person SET verified = $1 WHERE identity_no = $2 AND deleted = false", [flag, identity_no]);
+    const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1)", [identity_no]);
+    for (let row of vehicles["rows"]) {
+      let vehicleBuffer = await cache.hgetAsync("vehicle-entities", row["id"]);
+      let vehicle = await msgpack_decode(vehicleBuffer);
+      vehicle["owner"]["verified"] = flag;
+      vehicleBuffer = await msgpack_encode(vehicle);
+      await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
+      vids.push(row["id"]);
     }
-  })();
+    return { code: 200, data: vids };
+  } catch (e) {
+    log.error(e);
+    return { code: 500, msg: e.message };
+  }
 });
 
-async function sync_vehicle(db: PGClient, cache: RedisClient, vid?: string) {
+processor.callAsync("createPerson", async (ctx: ProcessorContext, drivers: Object[], callback: string) => {
+  log.info("createPerson drivers: " + JSON.stringify(drivers));
+  const db: PGClient = ctx.db;
+  const cache: RedisClient = ctx.cache;
+  const done = ctx.done;
   try {
-    const result = await db.query("SELECT v.id, v.uid, v.owner, v.owner_type, v.applicant, v.license_no, v.engine_no, v.register_date, v.average_mileage, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.recommend, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_date, m.vehicle_code, m.vehicle_name, m.brand_name, m.family_name, m.body_type, m.engine_desc, m.gearbox_name, m.year_pattern, m.group_name, m.cfg_level, m.purchase_price, m.purchase_price_tax, m.seat, m.effluent_standard, m.pl, m.fuel_jet_type, m.driven_type, p.id As pid, p.name, p.identity_no, p.phone, p.identity_frontal_view, p.identity_rear_view, p.license_frontal_view, p.license_rear_view, p.verified, p.email, p.address FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.vehicle_code LEFT JOIN person AS p on v.owner = p.id WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
-    const multi = bluebird.promisifyAll(cache.multi()) as Multi;
-    for (const row of result.rows) {
-      const vehicle = row2vehicle(row);
-      vehicle["vehicle_model"] = row2model(row);
-      vehicle["owner"] = row2person(row);
-      const applicant = vehicle["applicant"];
-      const aresult = await db.query("SELECT id, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM person WHERE id = $1", [applicant]);
-      if (aresult.rows.length > 0) {
-        vehicle["applicant"] = row2person(aresult.rows[0]);
+    let pids: string[] = [];
+    // let vids = [];
+    // await db.query("UPDATE person SET verified = $1 WHERE identity_no = $2 AND deleted = false", [flag, identity_no]);
+    // const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1)", [identity_no]);
+    // for (let row of vehicles["rows"]) {
+    //   let vehicleBuffer = await cache.hgetAsync("vehicle-entities", row["id"]);
+    //   let vehicle = await msgpack_decode(vehicleBuffer);
+    //   vehicle["owner"]["verified"] = flag;
+    //   vehicleBuffer = await msgpack_encode(vehicle);
+    //   await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
+    //   vids.push(row["id"]);
+    // }
+    for (const drvr of drivers) {
+      let identity_no: string = drvr["identity_no"];
+      const pplr = await db.query("SELECT id FROM person WHERE identity_no = $1", [identity_no]);
+      if (pplr.rowCount > 0) {
+        await db.query("UPDATE person SET deleted = $1 WHERE identity_no = $2", [false, identity_no]);
+        pids.push(pplr.rows[0]);
+      } else {
+        const pid = uuid.v1();
+        const name = drvr["name"];
+        const identity_no = drvr["identity_no"];
+        const phone = drvr["phone"];
+        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
-      const dresult = await db.query("SELECT p.id AS pid, v.id AS vid, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view, is_primary, d.created_at AS created_at, d.updated_at AS updated_at FROM drivers AS d, person AS p, vehicles AS v WHERE p.id = d.pid AND d.vid = v.id AND v.id = $1", [vehicle["id"]]);
-      if (dresult.rows.length > 0) {
-        for (const r of dresult.rows) {
-          vehicle["drivers"].push(row2driver(r));
-        }
-      }
-
-      const vmpkt = await msgpack_encode(vehicle["vehicle_model"]);
-      multi.hset("vehicle-model-entities", vehicle["vehicle_code"], vmpkt);
-      const vpkt = await msgpack_encode(vehicle);
-      multi.hset("vehicle-entities", vehicle["id"], vpkt);
     }
-    await multi.execAsync();
+    return { code: 200, data: pids };
+  } catch (e) {
+    log.error(e);
+    return { code: 500, msg: e.message };
+  }
+});
+
+async function sync_vehicle(ctx: ProcessorContext, db: PGClient, cache: RedisClient, vid?: string): Promise<any> {
+  try {
+    const result = await db.query("SELECT v.id, v.uid, v.owner, v.owner_type, v.insured, v.license_no, v.engine_no, v.register_date, v.average_mileage, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.recommend, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_date,m.code AS vehicle_code, m.data AS vmodel, p.id AS pid, p.name, p.identity_no, p.phone, p.identity_frontal_view, p.identity_rear_view, p.license_frontal_view, p.license_rear_view, p.verified, p.email, p.address FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code LEFT JOIN person AS p on v.owner = p.id WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
+    const multi = bluebird.promisifyAll(cache.multi()) as Multi;
+    if (result.rowCount > 0) {
+      for (const row of result.rows) {
+        const vehicle = row2vehicle(row);
+        vehicle["vehicle_model"] = row2model(row);
+        vehicle["owner"] = row2person(row);
+        const insured = row["insured"];
+        const aresult = await db.query("SELECT id, name, identity_no, phone, identity_frontal_view, identity_rear_view, license_frontal_view, license_rear_view FROM person WHERE id = $1", [insured]);
+        if (aresult.rows.length > 0) {
+          vehicle["insured"] = row2person(aresult.rows[0]);
+        }
+        const drvorder = await rpc(ctx.domain, process.env["ORDER"], ctx.uid, "getDriverOrdersByVehicle", vehicle["id"]);
+        if (drvorder["code"] === 200) {
+          const drvs = drvorder["drivers"];
+          if (drvs && drvs.length > 0) {
+            for (const drv of drvs) {
+              vehicle["drivers"].push(row2person(drv));
+            }
+          }
+        }
+        const vmpkt = await msgpack_encode(vehicle["vehicle_model"]);
+        multi.hset("vehicle-model-entities", vehicle["vehicle_code"], vmpkt);
+        const vpkt = await msgpack_encode(vehicle);
+        multi.hset("vehicle-entities", vehicle["id"], vpkt);
+      }
+      await multi.execAsync();
+    }
   } catch (e) {
     log.info(e);
   }
 }
+

@@ -1,11 +1,14 @@
 import { Server, ServerContext, ServerFunction, CmdPacket, Permission, waiting, waitingAsync, wait_for_response, msgpack_decode, msgpack_encode } from "hive-service";
 import { Client as PGClient } from "pg";
-import { RedisClient } from "redis";
+import { RedisClient, Multi } from "redis";
 import * as crypto from "crypto";
 import * as http from "http";
 import * as bunyan from "bunyan";
 import * as uuid from "node-uuid";
 import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier, dateVerifier } from "hive-verify";
+import { getCarModelByVin, Option } from "jy-library";
+import { getCity, getVehicleByLicense, getCarModel } from "ztyq-library";
+import * as bluebird from "bluebird";
 
 const allowAll: Permission[] = [["mobile", true], ["admin", true]];
 const mobileOnly: Permission[] = [["mobile", true], ["admin", false]];
@@ -38,214 +41,232 @@ let entity_key = "vehicle-model-entities";
 let vehicle_key = "vehicle";
 let vehicle_entities = "vehicle-entities";
 
-server.call("uploadStatus", allowAll, "查看用户上传证件情况", "根据订单找车", (ctx: ServerContext, rep: ((result: any) => void), order_id: string) => {
-  log.info("uploadStatus orderid:" + order_id + "uid is " + ctx.uid);
-  if (!verify([uuidVerifier("order_id", order_id)], (errors: string[]) => {
-    log.info("order_id is not uuid");
-    rep({
+// 获取车型信息(NEW)
+server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext, vin: string) => {
+  try {
+    verify([
+      uuidVerifier("vin", vin)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
   }
-  ctx.cache.hget("order-entities", order_id, function (err, result) {
-    (async () => {
-      try {
-        if (result) {
-          let order = await msgpack_decode(result);
-          let vid = order["vehicle"]["id"];
-          ctx.cache.hget(vehicle_entities, vid, function (err2, result2) {
-            if (err2) {
-              rep({ code: 500, msg: err2 });
-            } else {
-              if (result2 !== null) {
-                (async () => {
-                  try {
-                    let vehicle = await msgpack_decode(result2);
-                    let drivers = vehicle["drivers"];
-                    let sum = 5 + drivers.length;
-                    let vnum = 0;
-                    if (vehicle["driving_frontal_view"]) {
-                      vnum += 1;
-                    }
-                    if (vehicle["driving_rear_view"]) {
-                      vnum += 1;
-                    }
-                    if (vehicle["owner"]["identity_frontal_view"]) {
-                      vnum += 1;
-                    }
-                    if (vehicle["owner"]["identity_rear_view"]) {
-                      vnum += 1;
-                    }
-                    if (vehicle["owner"]["license_view"]) {
-                      vnum += 1;
-                    }
-                    for (let driver of drivers) {
-                      if (driver.license_view) {
-                        vnum++;
-                      }
-                    }
-                    if (vnum === 0) {
-                      rep({ certificate_state: 0, meaning: "未上传证件" });
-                    } else if (vnum < sum) {
-                      rep({ certificate_state: 1, meaning: "上传部分证件" });
-                    } else if (vnum === sum) {
-                      rep({ certificate_state: 2, meaning: "已全部上传" });
-                    }
-                  } catch (e) {
-                    log.error(e);
-                    rep({ code: 500, msg: e.message });
-                  }
-                })();
-              } else {
-                rep({ code: 404, msg: "Not Found Vehicle" });
-              }
-            }
-          });
-        } else if (err) {
-          rep({ code: 500, msg: err });
-        } else {
-          rep({ code: 404, msg: "Not Found Order" });
+  log.info("fetchVehicleModelsByVin vin:" + vin + " uid is " + ctx.uid);
+  try {
+    const vehicle_code = await ctx.cache.hgetAsync("vehicle-vin-codes", vin);
+    if (vehicle_code) {
+      const vehicle_model_buff = await ctx.cache.hgetAsync("vehicle-model-entities", vehicle_code);
+      if (vehicle_model_buff) {
+        const vehicle_model = await msgpack_decode(vehicle_model_buff);
+        return {
+          code: 200,
+          msg: vehicle_model
+        };
+      } else {
+        // 可以封装成函数复用
+        const options: Option = {
+          log: log
+        };
+        try {
+          const cmbvr = await getCarModelByVin(vin, options);
+          const args = transVehicleModel(cmbvr["data"]);
+          if (args && args.length > 0) {
+            let callback = uuid.v1();
+            const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin, callback] };
+            ctx.publish(pkt);
+            return await waitingAsync(ctx);
+          } else {
+            return {
+              code: 404,
+              msg: "该车型没找到,请检查VIN码输入是否正确"
+            };
+          }
+        } catch (err) {
+          log.error(err);
+          let data = {
+            vin: vin
+          };
+          if (err.code === 408) {
+            await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
+            return {
+              code: 504,
+              msg: "访问智通接口超时"
+            };
+          } else {
+            log.error(err);
+            await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
+            return {
+              code: 500,
+              msg: err.msg
+            };
+          };
         }
-      } catch (e) {
-        log.error(e);
-        rep({ code: 500, msg: e.message });
       }
-    })();
-  });
+    } else {
+      // 可以封装成函数复用
+      const options: Option = {
+        log: log
+      };
+      try {
+        const result = await getCarModelByVin(vin, options);
+        const args = result["data"];
+        if (args && args.length > 0) {
+          let models = [];
+          for (let mdl of args) {
+            let model = {
+              vehicle_code: mdl["vehicleCode"],
+              vehicle_name: mdl["vehicleName"],
+              brand_name: mdl["brandName"],
+              family_name: mdl["familyName"],
+              body_type: mdl["pl"],
+              engine_desc: mdl["engineDesc"],
+              gearbox_name: mdl["gearboxName"],
+              year_pattern: mdl["yearPattern"],
+              group_name: mdl["groupName"],
+              cfg_level: mdl["cfgLevel"],
+              purchase_price: mdl["purchasePrice"],
+              purchase_price_tax: mdl["purchasePriceTax"],
+              seat: mdl["seat"],
+              effluent_standard: mdl["effluentStandard"],
+              pl: mdl["pl"],
+              fuel_jet_type: mdl["fuelJetType"],
+              driven_type: mdl["drivenType"]
+            };
+            models.push(model);
+          }
+          let callback = uuid.v1();
+          const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [models, vin, callback] };
+          ctx.publish(pkt);
+          return await waitingAsync(ctx);
+        } else {
+          return {
+            code: 404,
+            msg: "该车型没找到,请检查VIN码输入是否正确"
+          };
+        }
+      } catch (err) {
+        log.error(err);
+        let data = {
+          vin: vin
+        };
+        if (err.code === 408) {
+          await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
+          return {
+            code: 504,
+            msg: "访问智通接口超时"
+          };
+        } else {
+          log.error(err);
+          await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
+          return {
+            code: 500,
+            msg: err.msg
+          };
+        };
+      }
+    }
+  } catch (err) {
+    log.error(err);
+    let data = {
+      vin: vin
+    };
+    await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
+    return {
+      code: 500,
+      msg: err.msg
+    };
+  }
 });
 
-server.call("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", (ctx: ServerContext, rep: ((result: any) => void), vid: string) => {
-  if (!verify([uuidVerifier("vid", vid)], (errors: string[]) => {
-    log.info("vid is not match");
-    rep({
+server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehicle code", async (ctx: ServerContext, code: string) => {
+  try {
+    verify([
+      uuidVerifier("code", code)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
+  }
+  log.info("getVehicleModel oode:" + code + " uid is " + ctx.uid);
+  try {
+    const vehicle_model_buff = await ctx.cache.hgetAsync("vehicle-model-entities", code);
+    if (vehicle_model_buff) {
+      const vehicle_model = await msgpack_decode(vehicle_model_buff);
+      return {
+        code: 200,
+        data: vehicle_model
+      };
+    } else {
+      return {
+        code: 404,
+        msg: "not found"
+      };
+    }
+  } catch (err) {
+    log.error(err);
+    return {
+      code: 500,
+      msg: err.message
+    };
+  }
+});
+
+server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", async (ctx: ServerContext, vid: string) => {
+  try {
+    verify([
+      uuidVerifier("vid", vid)
+    ]);
+  } catch (err) {
+    return {
+      code: 400,
+      msg: err.message
+    };
   }
   log.info("getVehicle vid:" + vid + " uid is " + ctx.uid);
-  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err) {
-      rep({ code: 500, msg: err });
-    } else if (result) {
-      (async () => {
-        try {
-          const pkt = await msgpack_decode(result);
-          rep({ code: 200, data: pkt });
-        } catch (e) {
-          log.error(e);
-          rep({ code: 500, msg: e.message });
-        }
-      })();
+  try {
+    const result = await ctx.cache.hgetAsync(vehicle_entities, vid);
+    if (result) {
+      const pkt = await msgpack_decode(result);
+      return {
+        code: 200,
+        data: pkt
+      };
     } else {
-      rep({ code: 404, msg: "not found" });
+      return {
+        code: 404,
+        msg: "not found"
+      };
     }
-  });
-});
-
-server.call("getVehicles", allowAll, "获取所有车信息", "获取所有车信息", (ctx: ServerContext, rep: ((result: any) => void), start: number, limit: number) => {
-  log.info("getVehicles" + "uid is " + ctx.uid);
-  ctx.cache.lrange(vehicle_key, start, limit, function (err, result) {
-    if (err) {
-      rep({ code: 500, msg: err });
-    } else if (result) {
-      let vehicles: any;
-      let multi = ctx.cache.multi();
-      for (let id of result) {
-        multi.hget(vehicle_entities, id);
-      }
-      multi.exec((err2, result2) => {
-        if (err2) {
-          log.info(err);
-          rep({ code: 500, msg: err2 });
-        } else if (result2) {
-          (async () => {
-            try {
-              let vehicles = [];
-              for (let vehicle of result2) {
-                let pkt = await msgpack_decode(vehicle);
-                vehicles.push(pkt);
-              }
-              rep({ code: 200, data: vehicles });
-            } catch (e) {
-              log.error(e);
-              rep({ code: 500, msg: e.message });
-            }
-          })();
-        } else {
-          log.info("not found vehicle");
-          rep({ code: 404, msg: "vehicle not found" });
-        }
-      });
-    } else {
-      rep({ code: 404, msg: "vehicle keys not found" });
-    }
-  });
-});
-
-server.call("getDriver", allowAll, "获取驾驶人信息", "获取驾驶人信息", (ctx: ServerContext, rep: ((result: any) => void), vid: string, pid: string) => {
-  log.info("getDriver " + "uid is " + ctx.uid + "vid:" + vid + "pid" + pid);
-  if (!verify([uuidVerifier("vid", vid), uuidVerifier("pid", pid)], (errors: string[]) => {
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+  } catch (err) {
+    log.error(err);
+    return {
+      code: 500,
+      msg: err.message
+    };
   }
-  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err) {
-      rep({ code: 500, msg: "error" });
-    } else {
-      if (result !== null) {
-        (async () => {
-          try {
-            let vehicle = await msgpack_decode(result);
-            let drivers = vehicle["drivers"];
-            let result2: any;
-            for (let driver of drivers) {
-              if (driver.id === pid) {
-                result2 = driver;
-                break;
-              }
-            }
-            if (result2 === null || result2 === undefined || result2 === "") {
-              rep({ code: 404, msg: "not found driver" });
-            } else {
-              rep({ code: 200, data: result2 });
-            }
-          } catch (e) {
-            log.error(e);
-            rep({ code: 500, msg: e.message });
-          }
-        })();
-      } else {
-        rep({ code: 404, msg: "not found vehicle" });
-      }
-    }
-  });
 });
 
-server.callAsync("setVehicleOnCard", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin_code: string, accident_status: number) => {
-  log.info(`setVehicleOnCard, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin_code: ${vin_code}, accident_status: ${accident_status}`);
+server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, insured_name: string, insured_identity_no: string, insured_phone: string, recommend: string, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
+  log.info(`setVehicleOnCard, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   try {
     verify([
       uuidVerifier("uid", ctx.uid),
       stringVerifier("owner_name", owner_name),
       stringVerifier("owner_identity_no", owner_identity_no),
       stringVerifier("owner_phone", owner_phone),
-      stringVerifier("applicant_name", applicant_name),
-      stringVerifier("applicant_identity_no", applicant_identity_no),
-      stringVerifier("applicant_phone", applicant_phone),
+      stringVerifier("insured_name", insured_name),
+      stringVerifier("insured_identity_no", insured_identity_no),
+      stringVerifier("insured_phone", insured_phone),
       stringVerifier("vehicle_code", vehicle_code),
       stringVerifier("license_no", license_no),
       stringVerifier("engine_no", engine_no),
       stringVerifier("average_mileage", average_mileage),
       booleanVerifier("is_transfer", is_transfer),
-      stringVerifier("vin_code", vin_code),
+      stringVerifier("vin", vin),
       numberVerifier("accident_status", accident_status),
       dateVerifier("register_date", register_date),
       dateVerifier("insurance_due_date", insurance_due_date),
@@ -257,29 +278,29 @@ server.callAsync("setVehicleOnCard", allowAll, "添加车信息上牌车", "添�
     };
   }
   const uid = ctx.uid;
-  const vin = vin_code.toUpperCase();
+  const vin_code = vin.toUpperCase();
   const uengine_no = engine_no.toUpperCase();
   const ulicense_no = license_no.toUpperCase();
   const args = [
-    uid, owner_name, owner_identity_no, owner_phone, applicant_name, applicant_identity_no, applicant_phone, recommend, vehicle_code, ulicense_no, uengine_no,
-    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status
+    uid, owner_name, owner_identity_no, owner_phone, insured_name, insured_identity_no, insured_phone, recommend, vehicle_code, ulicense_no, uengine_no,
+    register_date, average_mileage, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin_code, accident_status
   ];
-  const pkt: CmdPacket = { cmd: "setVehicleOnCard", args: args };
+  const pkt: CmdPacket = { cmd: "createVehicle", args: args };
   ctx.publish(pkt);
-  return waitingAsync(ctx);
+  return await waitingAsync(ctx);
 });
 
-server.callAsync("setVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, applicant_name: string, applicant_identity_no: string, applicant_phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
-  log.info(`setVehicle, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, applicant_name: ${applicant_name}, applicant_identity_no: ${applicant_identity_no}, applicant_phone: ${applicant_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin_code: ${vin_code}`);
+server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, owner_name: string, owner_identity_no: string, owner_phone: string, insured_name: string, insured_identity_no: string, insured_phone: string, recommend: string, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, average_mileage: string, is_transfer: boolean, last_insurance_company: string, fuel_type: string, vin_code: string) => {
+  log.info(`setVehicle, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, owner_phone: ${owner_phone}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, average_mileage: ${average_mileage}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin_code: ${vin_code}`);
   try {
     verify([
       uuidVerifier("uid", ctx.uid),
       stringVerifier("owner_name", owner_name),
       stringVerifier("owner_identity_no", owner_identity_no),
       stringVerifier("owner_phone", owner_phone),
-      stringVerifier("applicant_name", applicant_name),
-      stringVerifier("applicant_identity_no", applicant_identity_no),
-      stringVerifier("applicant_phone", applicant_phone),
+      stringVerifier("insured_name", insured_name),
+      stringVerifier("insured_identity_no", insured_identity_no),
+      stringVerifier("insured_phone", insured_phone),
       stringVerifier("vehicle_code", vehicle_code),
       stringVerifier("engine_no", engine_no),
       stringVerifier("average_mileage", average_mileage),
@@ -297,266 +318,123 @@ server.callAsync("setVehicle", allowAll, "添加车信息", "添加车信息(新
   const uid = ctx.uid;
   const uengine_no = engine_no.toUpperCase();
   const ureceipt_no = receipt_no.toUpperCase();
-  const args = [uid, owner_name, owner_identity_no, owner_phone, applicant_name, applicant_identity_no, applicant_phone, recommend, vehicle_code, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin];
-  const pkt: CmdPacket = { cmd: "setVehicle", args: args };
+  const args = [uid, owner_name, owner_identity_no, owner_phone, insured_name, insured_identity_no, insured_phone, recommend, vehicle_code, uengine_no, average_mileage, is_transfer, ureceipt_no, receipt_date, last_insurance_company, fuel_type, vin];
+  const pkt: CmdPacket = { cmd: "createNewVehicle", args: args };
   ctx.publish(pkt);
-  return waitingAsync(ctx);
+  return await waitingAsync(ctx);
 });
 
-server.call("addDrivers", allowAll, "添加驾驶员信息", "添加驾驶员信息", (ctx: ServerContext, rep: ((result: any) => void), vid: string, drivers: any[]) => {
-  for (let driver of drivers) {
-    if (!verify([uuidVerifier("vid", vid), stringVerifier("name", driver["name"]), stringVerifier("identity_no", driver["identity_no"]), booleanVerifier("is_primary", driver["is_primary"])], (errors: string[]) => {
-      log.info(errors);
-      rep({
-        code: 400,
-        msg: errors.join("\n")
-      });
-    })) {
-      return;
-    }
-  }
-  let callback = uuid.v1();
-  let args = [vid, drivers, callback];
-  log.info("addDrivers " + args + "uid is " + ctx.uid);
-  const pkt: CmdPacket = { cmd: "addDrivers", args: args };
-  ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
-});
-
-server.call("getVehicleModelsByMake", allowAll, "获取车型信息", "获取车型信息", (ctx: ServerContext, rep: ((result: any) => void), vin_code: string) => {
-  log.info("getVehicleModelsByMake vin: " + vin_code + " uid is " + ctx.uid);
-  let vin = vin_code.toUpperCase();
-  if (!verify([stringVerifier("vin", vin)], (errors: string[]) => {
-    rep({
+server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照", async (ctx: ServerContext, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: {}) => {
+  log.info("uploadImages");
+  try {
+    verify([
+      uuidVerifier("vid", vid),
+      stringVerifier("driving_frontal_view", driving_frontal_view),
+      stringVerifier("driving_rear_view", driving_rear_view),
+      stringVerifier("identity_frontal_view", identity_frontal_view),
+      stringVerifier("identity_rear_view", identity_rear_view)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
-  }
-  ctx.cache.hget("vehicle-vin-codes", vin, function (err, result) {
-    if (err) {
-      rep({
-        code: 500,
-        msg: err
-      });
-    } else if (result) {
-      let multi = ctx.cache.multi();
-      let codes = JSON.parse(result);
-      for (let code of codes) {
-        multi.hget("vehicle-model-entities", code);
-      }
-      multi.exec((err2, result2) => {
-        if (err2) {
-          rep({
-            code: 500,
-            msg: err
-          });
-        } else if (result2) {
-          (async () => {
-            try {
-              let vehicleModels = [];
-              for (let vehicleModel of result2) {
-                let pkt = await msgpack_decode(vehicleModel);
-                vehicleModels.push(pkt);
-              }
-              rep({ code: 200, data: vehicleModels });
-            } catch (e) {
-              log.error(e);
-              rep({ code: 500, msg: e.message });
-            }
-          })();
-        } else {
-          getModel();
-        }
-      });
-    } else {
-      getModel();
-    }
-    function getModel() {
-      let data = JSON.stringify({
-        "channelType": "00",
-        "requestCode": "100103",
-        "operatorCode": "dev@fengchaohuzhu.com",
-        "data": {
-          "vinCode": vin
-        },
-        "dtype": "json",
-        "operatorPwd": "2fa392325f0fc080a7131a30a57ad4d3"
-      });
-      let options = {
-        hostname: "www.jy-epc.com",
-        port: 80,
-        path: "/api-show/NqAfterMarketDataServlet",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-json",
-          "Content-Length": data.length
-        }
-      };
-
-      const sn = crypto.randomBytes(8).toString("base64");
-
-      log.info(`jy-epc.com ${sn} request: ${data}`);
-
-      let req = http.request(options, (res) => {
-        console.log(`STATUS: ${res.statusCode}`);
-        console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => {
-          const content = chunk.toString();
-          log.info(`jy-epc.com ${sn} response: ${content}`);
-          try {
-            let arg = JSON.parse(content);
-            let args = arg.result;
-            if (args) {
-              let callback = uuid.v1();
-              const pkt: CmdPacket = { cmd: "getVehicleModelsByMake", args: [args, vin, callback] };
-              ctx.publish(pkt);
-              wait_for_response(ctx.cache, callback, rep);
-            } else {
-              rep({
-                code: 404,
-                msg: "该车型没找到,请检查VIN码输入是否正确"
-              });
-            }
-          } catch (e) {
-            log.error(e);
-            ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": e.message }), () => {
-              rep({ code: 500, msg: "车型查询接口无法连接!"});
-            });
-          }
-        });
-        res.on("end", () => {
-        });
-      });
-      req.setTimeout(60000, () => {
-        ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": "Timeout" }), () => {
-          rep({
-            code: 504,
-            msg: "京友接口超时"
-          });
-        });
-      });
-      req.on("error", (e) => {
-        ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "jy-epc.com", "request": JSON.parse(data), "response": e.message }), () => {
-          rep({
-            code: 404,
-            msg: "车型没找到"
-          });
-        });
-      });
-
-      req.write(data);
-      req.end();
-    }
-  });
-});
-
-server.call("uploadDriverImages", allowAll, "上传证件照", "上传证件照", (ctx: ServerContext, rep: ((result: any) => void), vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: {}) => {
-  log.info("uploadDriverImages");
-  if (!verify([uuidVerifier("vid", vid), stringVerifier("driving_frontal_view", driving_frontal_view), stringVerifier("driving_rear_view", driving_rear_view), stringVerifier("identity_frontal_view", identity_frontal_view), stringVerifier("identity_rear_view", identity_rear_view)], (errors: string[]) => {
-    log.info("args are mismatching");
-    rep({
-      code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
   }
   log.info("license_frontal_views:" + license_frontal_views);
-  ctx.cache.hget(vehicle_entities, vid, function (err, result) {
-    if (err) {
-      rep({ code: 500, msg: err.message });
-    } else if (result) {
+  try {
+    const result = await ctx.cache.hgetAsync(vehicle_entities, vid);
+    if (result) {
       let flag = false;
-      (async () => {
-        try {
-          let vehicle = await msgpack_decode(result);
-          let ownerid = vehicle["owner"]["id"];
-          for (let view in license_frontal_views) {
-            if (ownerid === view) {
-              flag = true;
-            }
-          }
-          if (!flag) {
-            rep({ code: 400, msg: "主要驾驶人照片为空！！" });
-          } else {
-            let callback = uuid.v1();
-            let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
-            log.info("uploadDriverImages" + args + "uid is " + ctx.uid);
-            const pkt: CmdPacket = { cmd: "uploadDriverImages", args: args };
-            ctx.publish(pkt);
-            wait_for_response(ctx.cache, callback, rep);
-          }
-        } catch (e) {
-          log.error(e);
-          rep({ code: 500, msg: e.message });
+      let vehicle = await msgpack_decode(result);
+      let ownerid = vehicle["owner"]["id"];
+      for (let view in license_frontal_views) {
+        if (ownerid === view) {
+          flag = true;
         }
-      })();
+      }
+      if (!flag) {
+        return { code: 400, msg: "主要驾驶人照片为空！！" };
+      } else {
+        let callback = uuid.v1();
+        let args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views, callback];
+        log.info("uploadImages" + args + "uid is " + ctx.uid);
+        const pkt: CmdPacket = { cmd: "uploadImages", args: args };
+        ctx.publish(pkt);
+        return await waitingAsync(ctx);
+      }
     } else {
-      rep({ code: 404, msg: "Vehicle not found" });
+      return {
+        code: 404,
+        msg: "Vehicle not found"
+      };
     }
-  });
+  } catch (err) {
+    return {
+      code: 500,
+      msg: err.message
+    };
+  }
 });
 
-server.call("getUserVehicles", allowAll, "获取用户车信息", "获取用户车信息", (ctx: ServerContext, rep: ((result: any) => void)) => {
-  log.info("getUserVehicles uid is " + ctx.uid);
-  ctx.cache.lrange("vehicle-" + ctx.uid, 0, -1, function (err, result) {
-    if (result !== null && result !== "" && result !== undefined) {
-      let multi = ctx.cache.multi();
+server.callAsync("getVehicleByUser", allowAll, "获取用户车信息", "获取用户车信息", async (ctx: ServerContext) => {
+  log.info("getVehicleByUser uid is " + ctx.uid);
+  try {
+    let result = await ctx.cache.lrangeAsync("vehicle-" + ctx.uid, 0, -1);
+    if (result) {
+      const multi = bluebird.promisifyAll(ctx.cache.multi()) as Multi;
       for (let id of result) {
         multi.hget(vehicle_entities, id);
       }
-      multi.exec((err2, result2) => {
+      const result2 = await multi.execAsync();
+      if (result2) {
         let vehicleFilter = result2.filter(e => e !== null);
         if (vehicleFilter.length !== 0) {
           let vehicleFilters = [];
-          (async () => {
-            try {
-              for (let v of vehicleFilter) {
-                let pkt = await msgpack_decode(v);
-                vehicleFilters.push(pkt);
-              }
-              rep({ code: 200, data: vehicleFilters });
-            } catch (e) {
-              log.error(e);
-              rep({ code: 500, msg: e.message });
-            }
-          })();
-        } else if (err2) {
-          log.info(err2);
-          rep({ code: 500, msg: err2 });
-        } else {
-          rep({ code: 404, msg: "vehicles not found" });
+          for (let v of vehicleFilter) {
+            let pkt = await msgpack_decode(v);
+            vehicleFilters.push(pkt);
+          }
+          return {
+            code: 200,
+            data: vehicleFilters
+          };
         }
-      });
-    } else if (err) {
-      log.info(err);
-      rep({ code: 500, msg: err });
+      } else {
+        return {
+          code: 404,
+          msg: "vehicles not found"
+        };
+      }
     } else {
-      rep({ code: 404, msg: "vehicle id not found" });
+      return {
+        code: 404,
+        msg: "vehicle id not found"
+      };
     }
-  });
+  } catch (err) {
+    return {
+      code: 500,
+      msg: err.message
+    };
+  }
 });
 
 
-function ids2objects(cache: RedisClient, key: string, ids: string[], rep: ((result: any) => void)) {
-  let multi = cache.multi();
+async function ids2objects(cache: RedisClient, key: string, ids: string[]) {
+  const multi = bluebird.promisifyAll(cache.multi()) as Multi;
   for (let id of ids) {
     multi.hget(key, id);
   }
-  multi.exec(function (err, replies) {
-    rep({ code: 200, data: replies });
-  });
+  const replies = await multi.execAsync();
+  return { code: 200, data: replies };
 }
 
 
-server.call("refresh", allowAll, "refresh", "refresh", (ctx: ServerContext, rep: ((result: any) => void), vid?: string) => {
+server.callAsync("refresh", allowAll, "refresh", "refresh", async (ctx: ServerContext, vid?: string) => {
   log.info(`refresh, vehicle id is ${vid}`);
   const pkt: CmdPacket = { cmd: "refresh", args: vid ? ["admin", vid] : ["admin"] };
   ctx.publish(pkt);
-  waiting(ctx, rep);
+  return await waitingAsync(ctx);
 });
 
 const provinces: Object = {
@@ -598,323 +476,214 @@ const provinces: Object = {
   "黑龙江": "230000"
 };
 
-server.call("getCityCode", allowAll, "", "", (ctx: ServerContext, rep: ((result: any) => void), provinceName: string, cityName: string) => {
+server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext, provinceName: string, cityName: string) => {
   log.info("provinceName: " + provinceName + " cityName: " + cityName);
-  if (!verify([stringVerifier("cityName", cityName), stringVerifier("provinceName", provinceName)], (errors: string[]) => {
-    log.info(errors);
-    rep({
+  try {
+    verify([
+      stringVerifier("provinceName", provinceName),
+      stringVerifier("cityName", cityName)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
   }
-
   const provinceCode = provinces[provinceName];
   if (provinceCode === undefined) {
-    rep({
+    return {
       code: 400,
       msg: "Province Code Not Found!"
-    });
+    };
   }
-
-  const sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
-
-  const data: Object = {
-    "operType": "QCC",
-    "msg": "",
-    "sendTime": sendTimeString,
-    "sign": "",
-    "data": {
-      "applicationID": "FENGCHAOHUZHU_SERVICE",
-      "provinceCode": provinceCode
-    }
-  };
-
-  const postData: string = JSON.stringify(data);
-  const options = {
-    hostname: "139.198.1.73",
-    port: 8081,
-    method: "POST",
-    path: "/zkyq-web/city/queryCity",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(postData)
-    }
-  };
-
-  const req = http.request(options, function (res) {
-    log.info("Status: " + res.statusCode);
-    res.setEncoding("utf8");
-
-    let result: string = "";
-
-    res.on("data", function (body) {
-      result += body;
-    });
-
-    res.on("end", function () {
-      let retData: Object = JSON.parse(result);
-      log.info(retData);
-      if (retData["state"] === "1" && retData["data"] !== undefined) {
-        let cityList = retData["data"];
-        for (let city of cityList) {
-          if (city.cityName === cityName) {
-            rep({
-              code: 200,
-              data: city.cityCode
-            });
-            return;
-          }
-        }
-        rep({
-          code: 404,
-          msg: "Not Found!"
-        });
-      } else {
-        rep({
-          code: 404,
-          msg: "Not Found!"
-        });
+  try {
+    const options: Option = {
+      log: log
+    };
+    const ctr = await getCity(provinceCode, options);
+    let cityList = ctr["data"];
+    for (let city of cityList) {
+      if (city.cityName === cityName) {
+        return {
+          code: 200,
+          data: city.cityCode
+        };
       }
-    });
-
-    req.on("error", (e) => {
-      log.info(`problem with request: ${e.message}`);
-      rep({
-        code: 500,
-        msg: e.message
-      });
-    });
-  });
-
-  req.end(postData);
+    }
+    return {
+      code: 404,
+      msg: "Not Found!"
+    };
+  } catch (err) {
+    log.info(`problem with request: ${err.message}`);
+    return {
+      code: 500,
+      msg: err.message
+    };
+  }
 });
 
+// (NEW)
 function transVehicleModel(models) {
   const vehicleModels = [];
-
-  for (const model of models) {
-    const vehicleModel = {
-      "vehicleCode": model["brandCode"].replace(/-/g, ""),
-      "vehicleName": model["standardName"],
-      "brandName": model["brandName"],
-      "familyName": model["familyName"],
-      "bodyType": null,
-      "engineDesc": model["engineDesc"],
-      "gearboxName": model["gearBoxType"],
-      "yearPattern": model["parentVehName"],
-      "groupName": null,
-      "cfgLevel": model["remark"],
-      "purchasePrice": model["purchasePrice"],
-      "purchasePriceTax": model["purchasePriceTax"],
-      "seat": model["seat"],
-      "effluentStandard": null,
-      "pl": null,
-      "fuelJetType": null,
-      "drivenType": null
-    };
-
-    vehicleModels.push(vehicleModel);
+  if (models && models.length > 0) {
+    for (const model of models) {
+      const vehicleModel = {
+        "vehicle_code": model["modelCode"].replace(/-/g, ""), // 车型代码
+        "vehicle_name": model["standardName"], // 车型名称
+        "brand_name": model["brandName"], // 品牌名称
+        "family_name": model["familyName"], // 车系名称
+        "body_type": null, // 车身结构
+        "engine_desc": model["engineDesc"], // 发动机描述
+        "gearbox_name": model["gearBoxType"], // 变速箱类型
+        "year_pattern": model["parentVehName"], // 车款
+        "group_name": null, // 车组名称
+        "cfg_level": model["remark"], // 配置级别
+        "purchase_price": model["purchasePrice"], // 新车购置价
+        "purchase_price_tax": model["purchasePriceTax"], // 新车购置价含税
+        "seat": model["seatCount"], // 座位
+        "effluent_standard": null, // 排放标准
+        "pl": null, // 排量
+        "fuel_jet_type": null, // 燃油类型
+        "driven_type": null // 驱动形式
+      };
+      vehicleModels.push(vehicleModel);
+    }
+    return vehicleModels;
+  } else {
+    return null;
   }
-
-  return vehicleModels;
 }
 
-server.call("fetchVehicleAndModelByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", (ctx: ServerContext, rep: ((result: any) => void), licenseNumber: string) => {
-  log.info(`fetchVehicleModelByLicense, licenseNumber: ${licenseNumber}`);
-  if (!verify([stringVerifier("licenseNumber", licenseNumber)], (errors: string[]) => {
-    log.info(errors);
-    rep({
+server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext, licenseNumber: string) => {
+  log.info(`fetchVehicleAndModelsByLicense, licenseNumber: ${licenseNumber}`);
+  try {
+    verify([
+      stringVerifier("licenseNumber", licenseNumber)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
   }
-
-  ctx.cache.hget("license-vehicle-models", licenseNumber, (e: Error, result: any) => {
-    if (e || !result) {
-      const sendTimeString: string = new Date().toISOString().replace(/T/, " ").replace(/\..+/, "");
-
-      const data: Object = {
-        "operType": "BDB",
-        "msg": "",
-        "sendTime": sendTimeString,
-        "sign": "",
-        "data": {
-          "licenseNo": licenseNumber,
-          "applicationID": "FENGCHAOHUZHU_SERVICE"
-        }
+  try {
+    // redis 缓存了该车牌的数据则从数据库读取
+    const vinr = await ctx.cache.hgetAsync("vehicle-license-vin", licenseNumber);
+    if (vinr) {
+      const options: Option = {
+        log: log
       };
-
-      const postData: string = JSON.stringify(data);
-      log.info(`ztwhtech.com BDB request: ${postData}`);
-
-      const options = {
-        hostname: "api.ztwltech.com",
-        // port: 8081,
-        method: "POST",
-        path: "/zkyq-web/pottingApi/information",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(postData)
-        }
-      };
-
-      const req = http.request(options, function (res) {
-        res.setEncoding("utf8");
-
-        let result: string = "";
-
-        res.on("data", function (body) {
-          result += body;
-        });
-
-        res.on("end", function () {
-          const retData: Object = JSON.parse(result);
-          log.info(`ztwhtech.com BDB response: ${JSON.stringify(retData)}`);
-
-          if (retData["state"] === "1") {
-            const vehicleInfo = retData["data"];
-
-            const data: Object = {
-              "operType": "JYK",
-              "msg": "",
-              "sendTime": sendTimeString,
-              "sign": "",
-              "data": {
-                "applicationID": "FENGCHAOHUZHU_SERVICE",
-                "responseNo": vehicleInfo["responseNo"],
-                "frameNo": vehicleInfo["frameNo"],
-                "licenseNo": vehicleInfo["licenseNo"]
-              }
-            };
-
-            const postData1: string = JSON.stringify(data);
-
-            log.info(`ztwhtech.com JYK request: ${postData1}`);
-
-            const options = {
-              hostname: "api.ztwltech.com",
-              // port: 8081,
-              method: "POST",
-              path: "/zkyq-web/pottingApi/information",
-              headers: {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(postData1)
-              }
-            };
-
-            const req1 = http.request(options, function (res1) {
-              res1.setEncoding("utf8");
-
-              let result: string = "";
-
-              res1.on("data", function (body) {
-                result += body;
-              });
-
-              res1.on("end", function () {
-                log.info(`ztwhtech.com JYK response: ${result}`);
-                const retData1: Object = JSON.parse(result);
-                if (retData1["state"] === "1") {
-                  vehicleInfo["models"] = retData1["data"];
-                  vehicleInfo["std_models"] = transVehicleModel(retData1["data"]);
-                  for (const model of vehicleInfo["models"]) {
-                    model["vehicleCode"] = model["brandCode"].replace(/-/g, "");
-                  }
-                  const cbflag = uuid.v1();
-                  const args = [vehicleInfo, cbflag];
-                  const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
-                  ctx.publish(pkt);
-
-                  msgpack_encode(vehicleInfo).then(buf => {
-                    ctx.cache.hset("vehicle-info", licenseNumber, buf);
-                  });
-                  wait_for_response(ctx.cache, cbflag, rep);
-                } else {
-                  rep({
-                    code: 500,
-                    msg: retData1["msg"]
-                  });
-                }
-
-                req1.setTimeout(60000, () => {
-                  ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }), () => {
-                    rep({
-                      code: 504,
-                      msg: "访问智通接口超时"
-                    });
-                  });
-                });
-
-                req1.on("error", (e) => {
-                  log.error(e);
-                  ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": e.message }), () => {
-                    rep({
-                      code: 500,
-                      msg: e.message
-                    });
-                  });
-                });
-              });
-            });
-
-            req1.end(postData1);
-          } else {
-            rep({
-              code: 500,
-              msg: retData["msg"]
-            });
+      const vblr = await getVehicleByLicense(licenseNumber, options);
+      const mdls_buff = await ctx.cache.hgetAsync("vehicle-vin-codes", vinr);
+      let models = [];
+      if (mdls_buff) {
+        const vcodes = await msgpack_decode(mdls_buff) as Array<string>;
+        if (vcodes) {
+          for (let vc of vcodes) {
+            const vm_buff = await ctx.cache.hgetAsync("vehicle-model-entities", vc);
+            let model = await msgpack_decode(vm_buff);
+            models.push(model);
           }
-        });
-
-        req.setTimeout(60000, () => {
-          ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }), () => {
-            rep({
-              code: 504,
-              msg: "访问智通接口超时"
-            });
-          });
-        });
-
-        req.on("error", (e) => {
-          log.error(e);
-          ctx.cache.lpush("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": e.message }), () => {
-            rep({
-              code: 500,
-              msg: e.message
-            });
-          });
-        });
-      });
-      req.end(postData);
-    } else {
-      msgpack_decode(result).then(buf => {
-        rep({ code: 200, data: buf });
-      }).catch(e => {
-        log.error(e);
-        rep({ code: 500, msg: e.message });
-      });
+          let vehicleInfo = {
+            response_no: vblr["data"]["responseNo"],
+            vehicle: {
+              engine_no: vblr["data"]["engineNo"],
+              register_date: vblr["data"]["registerDate"],
+              license_no: vblr["data"]["licenseNo"],
+              vin: vblr["data"]["frameNo"]
+            },
+            models: models
+          };
+          return { code: 200, data: vehicleInfo };
+        }
+      }
     }
-  });
+    // 其他 
+    const options: Option = {
+      log: log
+    };
+    const vblr = await getVehicleByLicense(licenseNumber, options);
+    // const vehicleInfo = vblr["data"];
+    let vehicleInfo = {
+      response_no: vblr["data"]["responseNo"],
+      vehicle: {
+        engine_no: vblr["data"]["engineNo"],
+        register_date: vblr["data"]["registerDate"],
+        license_no: vblr["data"]["licenseNo"],
+        vin: vblr["data"]["frameNo"]
+      }
+    };
+    const cmr = await getCarModel(vehicleInfo["vehicle"]["vin"], vehicleInfo["vehicle"]["license_no"], vehicleInfo["response_no"], options);
+    // vehicleInfo["models"] = cmr["data"];
+    vehicleInfo["models"] = transVehicleModel(cmr["data"]);
+    // for (const model of vehicleInfo["models"]) {
+    //   model["vehicle_code"] = model["modelCode"].replace(/-/g, "");
+    // }
+    const cbflag = uuid.v1();
+    const args = [vehicleInfo, cbflag];
+    const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
+    ctx.publish(pkt);
+    const buf = await msgpack_encode(vehicleInfo);
+    // await ctx.cache.hsetAsync("vehicle-info", licenseNumber, buf);
+    return await waitingAsync(ctx);
+  } catch (err) {
+    let data = {
+      licenseNumber: licenseNumber
+    };
+    if (err.code === 408) {
+      await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
+      return {
+        code: 504,
+        msg: "访问智通接口超时"
+      };
+    } else {
+      log.error(err);
+      await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
+      return {
+        code: 500,
+        msg: err.message
+      };
+    }
+  }
 });
 
-server.call("setPersonVerified", allowAll, "车主验证通过", "车主验证通过", (ctx: ServerContext, rep: ((result: any) => void), identity_no: string, flag: boolean) => {
-  if (!verify([stringVerifier("identity_no", identity_no), booleanVerifier("flag", flag)], (errors: string[]) => {
-    log.info(errors);
-    rep({
+server.callAsync("setPersonVerified", allowAll, "车主验证通过", "车主验证通过", async (ctx: ServerContext, identity_no: string, flag: boolean) => {
+  try {
+    verify([
+      stringVerifier("identity_no", identity_no),
+      booleanVerifier("flag", flag)
+    ]);
+  } catch (err) {
+    return {
       code: 400,
-      msg: errors.join("\n")
-    });
-  })) {
-    return;
+      msg: err.message
+    };
   }
   let callback = uuid.v1();
   let args = [identity_no, flag, callback];
   log.info("setPersonVerified " + args + "uid is " + ctx.uid);
   const pkt: CmdPacket = { cmd: "setPersonVerified", args: args };
   ctx.publish(pkt);
-  wait_for_response(ctx.cache, callback, rep);
-})
+  return await waitingAsync(ctx);
+});
+
+server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext, drivers: Object[]) => {
+  try {
+    verify([
+      arrayVerifier("drivers", drivers)
+    ]);
+  } catch (err) {
+    return {
+      code: 400,
+      msg: err.message
+    };
+  }
+  let callback = uuid.v1();
+  let args = [drivers, callback];
+  log.info("createPerson " + args + "uid is " + ctx.uid);
+  const pkt: CmdPacket = { cmd: "createPerson", args: args };
+  ctx.publish(pkt);
+  return await waitingAsync(ctx);
+});
+
