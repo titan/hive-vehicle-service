@@ -37,8 +37,7 @@ const log = bunyan.createLogger({
 
 
 // 获取车型信息(NEW)
-server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext,
-  vin: string) => {
+server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext, vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`);
   try {
     await verify([
@@ -168,8 +167,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
   }
 });
 
-server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehicle code", async (ctx: ServerContext,
-  code: string) => {
+server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehicle code", async (ctx: ServerContext, code: string) => {
   log.info(`getVehicleModel, sn: ${ctx.sn}, uid: ${ctx.uid}, code: ${code}`);
   try {
     await verify([
@@ -207,8 +205,7 @@ server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehi
   }
 });
 
-server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", async (ctx: ServerContext,
-  vid: string) => {
+server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", async (ctx: ServerContext, vid: string) => {
   log.info(`getVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   try {
     await verify([
@@ -246,17 +243,7 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
   }
 });
 
-server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext,
-  vehicle_code: string,
-  license_no: string,
-  engine_no: string,
-  register_date: Date,
-  is_transfer: boolean,
-  last_insurance_company: string,
-  insurance_due_date: Date,
-  fuel_type: string,
-  vin: string,
-  accident_status: number) => {
+server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
   log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   try {
     await verify([
@@ -287,14 +274,7 @@ server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext,
-  vehicle_code: string,
-  engine_no: string,
-  receipt_no: string,
-  receipt_date: Date,
-  is_transfer: boolean,
-  fuel_type: string,
-  vin: string) => {
+server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, is_transfer: boolean, fuel_type: string, vin: string) => {
   log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, is_transfer: ${is_transfer}, fuel_type: ${fuel_type}, vin: ${vin}`);
   try {
     await verify([
@@ -320,10 +300,7 @@ server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("updateDrivingView", allowAll, "更新行驶证信息", "更新行驶证信息", async (ctx: ServerContext,
-  vid: string,
-  driving_frontal_view: string,
-  driving_rear_view: string) => {
+server.callAsync("updateDrivingView", allowAll, "更新行驶证信息", "更新行驶证信息", async (ctx: ServerContext, vid: string, driving_frontal_view: string, driving_rear_view: string) => {
   log.info(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
   try {
     await verify([
@@ -374,8 +351,7 @@ async function ids2objects(cache: RedisClient,
 }
 
 
-server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext,
-  vid?: string) => {
+server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext, vid?: string) => {
   log.info(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   const pkt: CmdPacket = { cmd: "refresh", args: vid ? [vid] : [] };
   ctx.publish(pkt);
@@ -421,9 +397,7 @@ const provinces: Object = {
   "黑龙江": "230000"
 };
 
-server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext,
-  provinceName: string,
-  cityName: string) => {
+server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext, provinceName: string, cityName: string) => {
   log.info(`getCityCode, sn: ${ctx.sn}, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}`);
   try {
     await verify([
@@ -476,8 +450,7 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
   }
 });
 
-server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext,
-  license: string) => {
+server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext, license: string) => {
   log.info(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}`);
   try {
     await verify([
@@ -608,9 +581,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
 });
 
 // TODO
-server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext,
-  vid: string,
-  insurance_due_date: Date) => {
+server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext, vid: string, insurance_due_date: Date) => {
   log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   try {
     await verify([

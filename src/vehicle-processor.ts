@@ -28,9 +28,7 @@ let log = bunyan.createLogger({
 export const processor = new Processor();
 
 // 获取车型信息(NEW)
-processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
-  args: any,
-  vin: string) => {
+processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, args: any, vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -66,17 +64,7 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
 });
 
 // 新车已上牌个人
-processor.callAsync("createVehicle", async (ctx: ProcessorContext,
-  vehicle_code: string,
-  license_no: string,
-  engine_no: string,
-  register_date: Date,
-  is_transfer: boolean,
-  last_insurance_company: string,
-  insurance_due_date: Date,
-  fuel_type: string,
-  vin: string,
-  accident_status: number) => {
+processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
   log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -110,14 +98,7 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext,
 });
 
 // 新车未上牌个人
-processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
-  vehicle_code: string,
-  engine_no: string,
-  receipt_no: string,
-  receipt_date: Date,
-  is_transfer: boolean,
-  fuel_type: string,
-  vin: string) => {
+processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, is_transfer: boolean, fuel_type: string, vin: string) => {
   log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -151,10 +132,7 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
 });
 
 // NEW
-processor.callAsync("updateDrivingView", async (ctx: ProcessorContext,
-  vid: string,
-  driving_frontal_view: string,
-  driving_rear_view: string) => {
+processor.callAsync("updateDrivingView", async (ctx: ProcessorContext, vid: string, driving_frontal_view: string, driving_rear_view: string) => {
   log.info(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -282,8 +260,7 @@ function trim(str: string) {
   }
 }
 
-processor.callAsync("refresh", async (ctx: ProcessorContext,
-  vid?: string) => {
+processor.callAsync("refresh", async (ctx: ProcessorContext, vid?: string) => {
   log.info(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -311,8 +288,7 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
 
 });
 
-processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
-  vehicle_and_models_zt: Object) => {
+processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_and_models_zt: Object) => {
   log.info(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -370,12 +346,7 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
   }
 });
 
-
-
-// TODO
-processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
-  vid: string,
-  insurance_due_date: string) => {
+processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: string, insurance_due_date: string) => {
   log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -402,10 +373,7 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
 });
 
 
-async function sync_vehicle(ctx: ProcessorContext,
-  db: PGClient,
-  cache: RedisClient,
-  vid?: string): Promise<any> {
+async function sync_vehicle(ctx: ProcessorContext, db: PGClient, cache: RedisClient, vid?: string): Promise<any> {
   try {
     const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
