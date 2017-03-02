@@ -41,6 +41,37 @@ let entity_key = "vehicle-model-entities";
 let vehicle_key = "vehicle";
 let vehicle_entities = "vehicle-entities";
 
+function transVehicleModelByVin(models) {
+  const vehicleModels = [];
+  if (models && models.length > 0) {
+    for (const model of models) {
+      const vehicleModel = {
+        "source": 1, // 数据来源
+        "vehicle_code": model["vehicleCode"].replace(/-/g, ""), // 车型代码
+        "vehicle_name": model["vehicleName"], // 车型名称
+        "brand_name": model["brandName"], // 品牌名称
+        "family_name": model["familyName"], // 车系名称
+        "body_type": model["bodyType"], // 车身结构
+        "engine_desc": model["engineDesc"], // 发动机描述
+        "gearbox_name": model["gearboxName"], // 变速箱类型
+        "year_pattern": model["yearPattern"], // 车款
+        "group_name": model["groupName"], // 车组名称
+        "cfg_level": model["cfgLevel"], // 配置级别
+        "purchase_price": model["purchasePrice"], // 新车购置价
+        "purchase_price_tax": model["purchasePriceTax"], // 新车购置价含税
+        "seat": model["seat"], // 座位
+        "effluent_standard": model["effluentStandard"], // 排放标准
+        "pl": model["pl"], // 排量
+        "fuel_jet_type": model["fuelJetType"], // 燃油类型
+        "driven_type": model["drivenType"] // 驱动形式
+      };
+      vehicleModels.push(vehicleModel);
+    }
+    return vehicleModels;
+  } else {
+    return null;
+  }
+}
 // 获取车型信息(NEW)
 server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext, vin: string) => {
   try {
@@ -71,7 +102,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
         };
         try {
           const cmbvr = await getCarModelByVin(vin, options);
-          const args = transVehicleModel(cmbvr["data"]);
+          const args = transVehicleModelByVin(cmbvr["data"]);
           if (args && args.length > 0) {
             let callback = uuid.v1();
             const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin, callback] };
@@ -110,34 +141,11 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
         log: log
       };
       try {
-        const result = await getCarModelByVin(vin, options);
-        const args = result["data"];
+        const cmbvr = await getCarModelByVin(vin, options);
+        const args = transVehicleModelByVin(cmbvr["data"]);
         if (args && args.length > 0) {
-          let models = [];
-          for (let mdl of args) {
-            let model = {
-              vehicle_code: mdl["vehicleCode"],
-              vehicle_name: mdl["vehicleName"],
-              brand_name: mdl["brandName"],
-              family_name: mdl["familyName"],
-              body_type: mdl["pl"],
-              engine_desc: mdl["engineDesc"],
-              gearbox_name: mdl["gearboxName"],
-              year_pattern: mdl["yearPattern"],
-              group_name: mdl["groupName"],
-              cfg_level: mdl["cfgLevel"],
-              purchase_price: mdl["purchasePrice"],
-              purchase_price_tax: mdl["purchasePriceTax"],
-              seat: mdl["seat"],
-              effluent_standard: mdl["effluentStandard"],
-              pl: mdl["pl"],
-              fuel_jet_type: mdl["fuelJetType"],
-              driven_type: mdl["drivenType"]
-            };
-            models.push(model);
-          }
           let callback = uuid.v1();
-          const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [models, vin, callback] };
+          const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin, callback] };
           ctx.publish(pkt);
           return await waitingAsync(ctx);
         } else {
@@ -524,28 +532,29 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
 });
 
 // (NEW)
-function transVehicleModel(models) {
+function transVehicleModelByLicense(models) {
   const vehicleModels = [];
   if (models && models.length > 0) {
     for (const model of models) {
       const vehicleModel = {
+        "source": 2, // 数据来源
         "vehicle_code": model["modelCode"].replace(/-/g, ""), // 车型代码
         "vehicle_name": model["standardName"], // 车型名称
         "brand_name": model["brandName"], // 品牌名称
         "family_name": model["familyName"], // 车系名称
-        "body_type": null, // 车身结构
+        // "body_type": null, // 车身结构
         "engine_desc": model["engineDesc"], // 发动机描述
         "gearbox_name": model["gearBoxType"], // 变速箱类型
         "year_pattern": model["parentVehName"], // 车款
-        "group_name": null, // 车组名称
+        // "group_name": null, // 车组名称
         "cfg_level": model["remark"], // 配置级别
         "purchase_price": model["purchasePrice"], // 新车购置价
         "purchase_price_tax": model["purchasePriceTax"], // 新车购置价含税
-        "seat": model["seatCount"], // 座位
-        "effluent_standard": null, // 排放标准
-        "pl": null, // 排量
-        "fuel_jet_type": null, // 燃油类型
-        "driven_type": null // 驱动形式
+        "seat": model["seatCount"] // 座位
+        // "effluent_standard": null, // 排放标准
+        // "pl": null, // 排量
+        // "fuel_jet_type": null, // 燃油类型
+        // "driven_type": null // 驱动形式
       };
       vehicleModels.push(vehicleModel);
     }
@@ -616,7 +625,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     };
     const cmr = await getCarModel(vehicleInfo["vehicle"]["vin"], vehicleInfo["vehicle"]["license_no"], vehicleInfo["response_no"], options);
     // vehicleInfo["models"] = cmr["data"];
-    vehicleInfo["models"] = transVehicleModel(cmr["data"]);
+    vehicleInfo["models"] = transVehicleModelByLicense(cmr["data"]);
     // for (const model of vehicleInfo["models"]) {
     //   model["vehicle_code"] = model["modelCode"].replace(/-/g, "");
     // }
@@ -668,9 +677,35 @@ server.callAsync("setPersonVerified", allowAll, "车主验证通过", "车主验
   return await waitingAsync(ctx);
 });
 
-server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext, drivers: Object[]) => {
+server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext, people: Object[]) => {
   try {
     verify([
+      arrayVerifier("people", people)
+    ]);
+  } catch (err) {
+    return {
+      code: 400,
+      msg: err.message
+    };
+  }
+  if (people.length === 0) {
+    return {
+      code: 404,
+      msg: "请输入待增人员信息"
+    };
+  }
+  let callback = uuid.v1();
+  let args = [people, callback];
+  log.info("createPerson " + args + "uid is " + ctx.uid);
+  const pkt: CmdPacket = { cmd: "createPerson", args: args };
+  ctx.publish(pkt);
+  return await waitingAsync(ctx);
+});
+
+server.callAsync("addDrivers", allowAll, "添加驾驶人信息", "添加驾驶人信息", async (ctx: ServerContext, vid: string, drivers: Object[]) => {
+  try {
+    verify([
+      uuidVerifier("vid", vid),
       arrayVerifier("drivers", drivers)
     ]);
   } catch (err) {
@@ -679,11 +714,54 @@ server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async
       msg: err.message
     };
   }
+  if (drivers.length > 3) {
+    return {
+      code: 426,
+      msg: "添加司机数量超过3人"
+    };
+  }
+  if (drivers.length === 0) {
+    return {
+      code: 404,
+      msg: "请检查是否输入待增司机"
+    };
+  }
   let callback = uuid.v1();
-  let args = [drivers, callback];
-  log.info("createPerson " + args + "uid is " + ctx.uid);
-  const pkt: CmdPacket = { cmd: "createPerson", args: args };
+  let args = [vid, drivers, callback];
+  log.info("addDrivers " + args + "uid is " + ctx.uid);
+  const pkt: CmdPacket = { cmd: "addDrivers", args: args };
   ctx.publish(pkt);
   return await waitingAsync(ctx);
 });
 
+server.callAsync("delDrivers", allowAll, "删除驾驶人信息", "删除驾驶人信息", async (ctx: ServerContext, vid: string, drivers: string[]) => {
+  try {
+    verify([
+      uuidVerifier("vid", vid),
+      arrayVerifier("drivers", drivers)
+    ]);
+  } catch (err) {
+    return {
+      code: 400,
+      msg: err.message
+    };
+  }
+  if (drivers.length > 3) {
+    return {
+      code: 426,
+      msg: "删除司机数量超过3人"
+    };
+  }
+  if (drivers.length === 0) {
+    return {
+      code: 404,
+      msg: "请检查是否输入待删司机"
+    };
+  }
+  let callback = uuid.v1();
+  let args = [vid, drivers, callback];
+  log.info("delDrivers " + args + "uid is " + ctx.uid);
+  const pkt: CmdPacket = { cmd: "delDrivers", args: args };
+  ctx.publish(pkt);
+  return await waitingAsync(ctx);
+});
