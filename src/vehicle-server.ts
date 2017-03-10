@@ -97,7 +97,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
             await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
             return {
               code: 500,
-              msg: err.message
+              msg: "获取车型信息失败"
             };
           };
         }
@@ -137,7 +137,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
           await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
           return {
             code: 500,
-            msg: err.message
+            msg: "获取车型信息失败"
           };
         };
       }
@@ -150,7 +150,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
     await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
     return {
       code: 500,
-      msg: err.message
+      msg: "获取车型信息失败"
     };
   }
 });
@@ -206,7 +206,7 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
     };
   }
   try {
-    const result = await ctx.cache.hgetAsync("vehicle-entities", vid);
+    const result: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
     if (result) {
       const pkt = await msgpack_decode(result);
       return {
@@ -224,7 +224,7 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
     log.error(`getVehicle, uid: ${ctx.uid}, vid: ${vid}`, err);
     return {
       code: 500,
-      msg: err.message
+      msg: "获取某辆车信息失败"
     };
   }
 });
@@ -327,7 +327,13 @@ server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照", async (ctx: ServerContext, vid: string, driving_frontal_view: string, driving_rear_view: string, identity_frontal_view: string, identity_rear_view: string, license_frontal_views: Object) => {
+server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照", async (ctx: ServerContext,
+  vid: string,
+  driving_frontal_view: string,
+  driving_rear_view: string,
+  identity_frontal_view: string,
+  identity_rear_view: string,
+  license_frontal_views: Object) => {
   log.info(`uploadImages, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify
     (license_frontal_views)}`);
   try {
@@ -345,7 +351,7 @@ server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照",
     };
   }
   try {
-    const result = await ctx.cache.hgetAsync("vehicle-entities", vid);
+    const result: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
     if (result) {
       let flag = false;
       let vehicle = await msgpack_decode(result);
@@ -378,7 +384,7 @@ server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照",
       (license_frontal_views)}`, err);
     return {
       code: 500,
-      msg: err.message
+      msg: "上传证件照失败"
     };
   }
 });
@@ -386,10 +392,11 @@ server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照",
 server.callAsync("getVehiclesByUser", allowAll, "获取用户车信息", "获取用户车信息", async (ctx: ServerContext) => {
   log.info(`getVehiclesByUser, uid: ${ctx.uid}`);
   try {
-    let result = await ctx.cache.zrevrangebyscoreAsync(`vehicles:${ctx.uid}`, "+inf", "-inf");
+    let result: Buffer = await ctx.cache.zrevrangebyscoreAsync(`vehicles:${ctx.uid}`, "+inf", "-inf");
     if (result) {
       const multi = bluebird.promisifyAll(ctx.cache.multi()) as Multi;
-      for (let id of result) {
+      for (let id_buff of result) {
+        let id = id_buff.toString();
         multi.hget("vehicle-entities", id);
       }
       const result2 = await multi.execAsync();
@@ -424,7 +431,7 @@ server.callAsync("getVehiclesByUser", allowAll, "获取用户车信息", "获取
     log.error(`getVehiclesByUser, uid: ${ctx.uid}`, err);
     return {
       code: 500,
-      msg: err.message
+      msg: "获取用户车信息失败"
     };
   }
 });
@@ -440,7 +447,8 @@ async function ids2objects(cache: RedisClient, key: string, ids: string[]) {
 }
 
 
-server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext, vid?: string) => {
+server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext,
+  vid?: string) => {
   log.info(`refresh, uid: ${ctx.uid}, vid: ${vid}`);
   const pkt: CmdPacket = { cmd: "refresh", args: vid ? [vid] : [] };
   ctx.publish(pkt);
@@ -486,7 +494,9 @@ const provinces: Object = {
   "黑龙江": "230000"
 };
 
-server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext, provinceName: string, cityName: string) => {
+server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext,
+  provinceName: string,
+  cityName: string) => {
   log.info(`getCityCode, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}`);
   try {
     verify([
@@ -535,7 +545,8 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
   }
 });
 
-server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext, license: string) => {
+server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext,
+  license: string) => {
   log.info(`fetchVehicleAndModelsByLicense, uid: ${ctx.uid}, license: ${license}`);
   try {
     verify([
@@ -549,33 +560,68 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
   }
   try {
     // redis 缓存了该车牌的数据则从数据库读取
-    const vinr = await ctx.cache.hgetAsync("vehicle-license-vin", license);
-    if (vinr) {
+    const vin_buff: Buffer = await ctx.cache.hgetAsync("vehicle-license-vin", license);
+    const vin: string = vin_buff.toString();
+    if (vin_buff) {
       const options: Option = {
         log: log
       };
-      const vblr = await getVehicleByLicense(license, options);
-      const mdls_buff = await ctx.cache.hgetAsync("vehicle-vin-codes", vinr);
-      let models = [];
-      if (mdls_buff) {
-        const vcodes = await msgpack_decode(mdls_buff) as Array<string>;
-        if (vcodes) {
-          for (let vc of vcodes) {
-            const vm_buff = await ctx.cache.hgetAsync("vehicle-model-entities", vc);
-            let model = await msgpack_decode(vm_buff);
-            models.push(model);
+      const response_no_buff: Buffer = await ctx.cache.getAsync(`zt-response-code:${license}`);
+      if (response_no_buff) {
+        // 响应码未过期
+        const response_no = await msgpack_decode(response_no_buff);
+        const mdls_buff: Buffer = await ctx.cache.hgetAsync("vehicle-vin-codes", vin);
+        let models = [];
+        if (mdls_buff) {
+          const vcodes = await msgpack_decode(mdls_buff) as Array<string>;
+          if (vcodes && vcodes.length > 0) {
+            for (let vc of vcodes) {
+              const vm_buff = await ctx.cache.hgetAsync("vehicle-model-entities", vc);
+              if (vm_buff) {
+                let model = await msgpack_decode(vm_buff);
+                models.push(model);
+              }
+            }
+            let vehicleInfo = {
+              response_no: response_no["response_no"],
+              vehicle: {
+                engine_no: response_no["vehicle"]["engine_no"],
+                register_date: response_no["vehicle"]["register_date"],
+                license_no: response_no["vehicle"]["license_no"],
+                vin: response_no["vehicle"]["vin"]
+              },
+              models: models
+            };
+            return { code: 200, data: vehicleInfo };
           }
-          let vehicleInfo = {
-            response_no: vblr["data"]["responseNo"],
-            vehicle: {
-              engine_no: vblr["data"]["engineNo"],
-              register_date: vblr["data"]["registerDate"],
-              license_no: vblr["data"]["licenseNo"],
-              vin: vblr["data"]["frameNo"]
-            },
-            models: models
-          };
-          return { code: 200, data: vehicleInfo };
+        }
+      } else {
+        // 响应码过期，重新获取响应码
+        const vblr = await getVehicleByLicense(license, options);
+        const mdls_buff: Buffer = await ctx.cache.hgetAsync("vehicle-vin-codes", vin);
+        let models = [];
+        if (mdls_buff) {
+          const vcodes = await msgpack_decode(mdls_buff) as Array<string>;
+          if (vcodes) {
+            for (let vc of vcodes) {
+              const vm_buff = await ctx.cache.hgetAsync("vehicle-model-entities", vc);
+              if (vm_buff) {
+                let model = await msgpack_decode(vm_buff);
+                models.push(model);
+              }
+            }
+            let vehicleInfo = {
+              response_no: vblr["data"]["responseNo"],
+              vehicle: {
+                engine_no: vblr["data"]["engineNo"],
+                register_date: vblr["data"]["registerDate"],
+                license_no: vblr["data"]["licenseNo"],
+                vin: vblr["data"]["frameNo"]
+              },
+              models: models
+            };
+            return { code: 200, data: vehicleInfo };
+          }
         }
       }
     }
@@ -609,7 +655,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
       await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
       return {
         code: 500,
-        msg: err.message
+        msg: "获取车型失败"
       };
     }
   }
@@ -634,7 +680,8 @@ server.callAsync("setPersonVerified", allowAll, "车主验证通过", "车主验
   return await waitingAsync(ctx);
 });
 
-server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext, people: Object[]) => {
+server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext,
+  people: Object[]) => {
   log.info(`createPerson, uid: ${ctx.uid}, people: ${JSON.stringify(people)}`);
   try {
     verify([
@@ -689,7 +736,9 @@ server.callAsync("addDrivers", allowAll, "添加驾驶人信息", "添加驾驶�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("delDrivers", allowAll, "删除驾驶人信息", "删除驾驶人信息", async (ctx: ServerContext, vid: string, drivers: string[]) => {
+server.callAsync("delDrivers", allowAll, "删除驾驶人信息", "删除驾驶人信息", async (ctx: ServerContext,
+  vid: string,
+  drivers: string[]) => {
   log.info(`delDrivers, uid: ${ctx.uid}, drivers: ${JSON.stringify(drivers)}`);
   try {
     verify([
@@ -720,7 +769,8 @@ server.callAsync("delDrivers", allowAll, "删除驾驶人信息", "删除驾驶�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("getPerson", allowAll, "获取人员信息", "根据pid获取人员信息", async (ctx: ServerContext, pid: string) => {
+server.callAsync("getPerson", allowAll, "获取人员信息", "根据pid获取人员信息", async (ctx: ServerContext,
+  pid: string) => {
   log.info(`getPerson, uid: ${ctx.uid}, pid: ${pid}`);
   try {
     verify([
@@ -733,7 +783,7 @@ server.callAsync("getPerson", allowAll, "获取人员信息", "根据pid获取�
     };
   }
   try {
-    const result = await ctx.cache.hgetAsync("person-entities", pid);
+    const result: Buffer = await ctx.cache.hgetAsync("person-entities", pid);
     if (result) {
       const person = await msgpack_decode(result);
       return {
@@ -749,6 +799,33 @@ server.callAsync("getPerson", allowAll, "获取人员信息", "根据pid获取�
     }
   } catch (err) {
     log.error(`getPerson, uid: ${ctx.uid}, pid: ${pid}`, err);
+    return {
+      code: 500,
+      msg: "获取人员信息失败"
+    };
+  }
+});
+
+// TODO
+server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext,
+  vid: string,
+  insurance_due_date: string) => {
+  log.info(`setInsuranceDueDate, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`);
+  try {
+    verify([
+      uuidVerifier("vid", vid)
+    ]);
+  } catch (err) {
+    return {
+      code: 400,
+      msg: err.message
+    };
+  }
+  try {
+    let args = [vid, insurance_due_date];
+    const pkt: CmdPacket = { cmd: "setInsuranceDueDate", args: args };
+  } catch (err) {
+    log.error(`setInsuranceDueDate, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
     return {
       code: 500,
       msg: err.message
