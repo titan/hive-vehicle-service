@@ -2,7 +2,6 @@ import { Processor, ProcessorFunction, ProcessorContext, rpc, set_for_response, 
 import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
 import * as uuid from "uuid";
-import * as http from "http";
 import * as bluebird from "bluebird";
 import * as bunyan from "bunyan";
 
@@ -32,23 +31,23 @@ export const processor = new Processor();
 processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
   args: any,
   vin: string) => {
-  log.info(`fetchVehicleModelsByVin, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
+  log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
-    let models_jy = args;
-    for (let model of models_jy) {
-      let dbmodel = await db.query("SELECT code FROM vehicle_models WHERE code = $1", [model["vehicleCode"]]);
+    const models_jy = args;
+    for (const model of models_jy) {
+      const dbmodel = await db.query("SELECT code FROM vehicle_models WHERE code = $1", [model["vehicleCode"]]);
       if (dbmodel["rowCount"] === 0) {
         await db.query("INSERT INTO vehicle_models(code, source, data) VALUES($1, 1, $2)", [model["vehicleCode"], model]);
       }
     }
     await db.query("COMMIT");
-    let multi = bluebird.promisifyAll(cache.multi()) as Multi;
-    let codes = [];
-    let models = transVehicleModelByVin(models_jy);
-    for (let model of models) {
+    const multi = bluebird.promisifyAll(cache.multi()) as Multi;
+    const codes = [];
+    const models = transVehicleModelByVin(models_jy);
+    for (const model of models) {
       const pkt = await msgpack_encode(model);
       multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
       codes.push(model["vehicle_code"]);
@@ -59,8 +58,9 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
     await multi.execAsync();
     return { code: 200, data: models };
   } catch (err) {
+    ctx.report(3, err);
     await db.query("ROLLBACK");
-    log.error(`fetchVehicleModelsByVin, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
+    log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
     return { code: 500, msg: "创建车型信息失败" };
   }
 });
@@ -221,6 +221,12 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
       }
     } else if (insured_result["code"] === 200) {
       insured_id = insured_result["data"]["id"];
+    } else {
+      log.error(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息异常`);
+      return {
+        code: 408,
+        msg: "设置投保人信息异常"
+      };
     }
     const vid = uuid.v1();
     await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date,last_insurance_company, fuel_type, vin, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, owner_id, 0, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin, insured_id]);
@@ -228,6 +234,7 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
     await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (err) {
+    ctx.report(3, err);
     await db.query("ROLLBACK");
     log.error(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
     return { code: 500, msg: "创建车辆信息失败" };
@@ -241,29 +248,28 @@ processor.callAsync("uploadImages", async (ctx: ProcessorContext,
   identity_frontal_view: string,
   identity_rear_view: string,
   license_frontal_views: Object) => {
-  log.info(`uploadImages, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify(license_frontal_views)}`);
+  log.info(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify(license_frontal_views)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
     await db.query("BEGIN");
     await db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2, updated_at = $3 WHERE id = $4", [driving_frontal_view, driving_rear_view, new Date(), vid]);
     await db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2, updated_at = $3 WHERE id in (SELECT owner FROM vehicles WHERE id = $4)", [identity_frontal_view, identity_rear_view, new Date(), vid]);
-    for (let key in license_frontal_views) {
+    for (const key in license_frontal_views) {
       if (license_frontal_views.hasOwnProperty(key)) {
         await db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key]);
       }
     }
     await db.query("COMMIT");
     const vehicle_buff: Buffer = await cache.hgetAsync("vehicle-entities", vid);
-    let vehicle = await msgpack_decode(vehicle_buff);
+    const vehicle = await msgpack_decode(vehicle_buff);
     vehicle["driving_frontal_view"] = driving_frontal_view;
     vehicle["driving_rear_view"] = driving_rear_view;
     vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
     vehicle["owner"]["identity_rear_view"] = identity_rear_view;
     vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
-    for (let key in license_frontal_views) {
-      for (let driver of vehicle["drivers"]) {
+    for (const key in license_frontal_views) {
+      for (const driver of vehicle["drivers"]) {
         if (driver["id"] === key) {
           driver["license_view"] = license_frontal_views[key];
         }
@@ -273,15 +279,16 @@ processor.callAsync("uploadImages", async (ctx: ProcessorContext,
     await cache.hsetAsync("vehicle-entities", vid, pkt);
     return { code: 200, data: vid };
   } catch (err) {
+    ctx.report(3, err);
     await db.query("ROLLBACK");
-    log.error(`uploadImages, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify(license_frontal_views)}`, err);
+    log.error(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify(license_frontal_views)}`, err);
     return { code: 500, msg: "更新证件照信息失败" };
   }
 });
 
 function row2model(row: Object) {
   // log.info(`row["source"]: ${row["source"]}`);
-  let src: number = row["source"];
+  const src: number = row["source"];
   let model = null;
   switch (src) {
     case 0:
@@ -405,7 +412,7 @@ function trim(str: string) {
 
 processor.callAsync("refresh", async (ctx: ProcessorContext,
   vid?: string) => {
-  log.info(`refresh, uid: ${ctx.uid}, vid: ${vid}`);
+  log.info(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
@@ -423,7 +430,8 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
     await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: "Refresh is done" };
   } catch (err) {
-    log.error(`refresh, uid: ${ctx.uid}, msg: error on remove old data`, err);
+    ctx.report(3, err);
+    log.error(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, msg: error on remove old data`, err);
     return {
       code: 500,
       msg: "Error on refresh"
@@ -434,22 +442,21 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
 
 processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
   vehicle_and_models_zt: Object) => {
-  log.info(`addVehicleModels, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
+  log.info(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
     await db.query("BEGIN");
     const vehicle_models_zt = vehicle_and_models_zt["models"];
     for (const model of vehicle_models_zt) {
-      let code = trim(model["modelCode"]).replace(/-/g, "");
+      const code = trim(model["modelCode"]).replace(/-/g, "");
       const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE code = $1 AND deleted = false", [code]);
       if (dbmodel["rowCount"] === 0) {
         await db.query("INSERT INTO vehicle_models(code, source, data) VALUES($1, 2, $2)", [code, model]);
       }
     }
     await db.query("COMMIT");
-    let vehicle_and_models = {
+    const vehicle_and_models = {
       response_no: vehicle_and_models_zt["vehicle"]["responseNo"],
       vehicle: {
         engine_no: vehicle_and_models_zt["vehicle"]["engineNo"],
@@ -461,7 +468,7 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
     };
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     const codes = [];
-    let vehicle_models = vehicle_and_models["models"];
+    const vehicle_models = vehicle_and_models["models"];
     for (const model of vehicle_models) {
       const pkt = await msgpack_encode(model);
       multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
@@ -486,7 +493,8 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
     return { code: 200, data: vehicle_and_models };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`addVehicleModels, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
+    ctx.report(3, err);
+    log.error(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
     return { code: 500, msg: "创建车型信息出错" };
   }
 });
@@ -495,18 +503,17 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
 processor.callAsync("setPersonVerified", async (ctx: ProcessorContext,
   identity_no: string,
   flag: boolean) => {
-  log.info(`setPersonVerified, uid: ${ctx.uid}, identity_no: ${identity_no}, flag: ${flag}`);
+  log.info(`setPersonVerified, sn: ${ctx.sn}, uid: ${ctx.uid}, identity_no: ${identity_no}, flag: ${flag}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
-    let vids = [];
+    const vids = [];
     await db.query("BEGIN");
     await db.query("UPDATE person SET verified = $1, updated_at = $2 WHERE identity_no = $3 AND deleted = false", [flag, new Date(), identity_no]);
     const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1 AND deleted = false) AND deleted = false", [identity_no]);
-    for (let row of vehicles["rows"]) {
+    for (const row of vehicles["rows"]) {
       let vehicleBuffer: Buffer = await cache.hgetAsync("vehicle-entities", row["id"]);
-      let vehicle = await msgpack_decode(vehicleBuffer);
+      const vehicle = await msgpack_decode(vehicleBuffer);
       vehicle["owner"]["verified"] = flag;
       vehicleBuffer = await msgpack_encode(vehicle);
       await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
@@ -515,19 +522,19 @@ processor.callAsync("setPersonVerified", async (ctx: ProcessorContext,
     return { code: 200, data: vids };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`setPersonVerified, uid: ${ctx.uid}, identity_no: ${identity_no}, flag: ${flag}`, err);
+    ctx.report(3, err);
+    log.error(`setPersonVerified, sn: ${ctx.sn}, uid: ${ctx.uid}, identity_no: ${identity_no}, flag: ${flag}`, err);
     return { code: 500, msg: "更新认证标识出错" };
   }
 });
 
 processor.callAsync("createPerson", async (ctx: ProcessorContext,
   people: Object[]) => {
-  log.info(`createPerson, uid: ${ctx.uid}, people: ${people}`);
+  log.info(`createPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, people: ${people}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
-    let pids: string[] = [];
+    const pids: string[] = [];
     await db.query("BEGIN");
     for (const ppl of people) {
       const identity_no: string = ppl["identity_no"];
@@ -550,7 +557,7 @@ processor.callAsync("createPerson", async (ctx: ProcessorContext,
       }
     }
     await db.query("COMMIT");
-    let persons = [];
+    const persons = [];
     for (const psnid of pids) {
       const psn_result = await db.query("SELECT id AS pid, name, identity_no, phone, email, address, identity_frontal_view, identity_rear_view, license_frontal_view, verified FROM person WHERE id = $1 AND deleted = false", [psnid]);
       if (psn_result.rowCount > 0) {
@@ -563,7 +570,8 @@ processor.callAsync("createPerson", async (ctx: ProcessorContext,
     return { code: 200, data: persons };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`createPerson, uid: ${ctx.uid}, people: ${people}`, err);
+    ctx.report(3, err);
+    log.error(`createPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, people: ${people}`, err);
     return { code: 500, msg: "创建人员信息出错" };
   }
 });
@@ -571,24 +579,23 @@ processor.callAsync("createPerson", async (ctx: ProcessorContext,
 
 processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
   drivers: Object[]) => {
-  log.info(`addDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`);
+  log.info(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
     await db.query("BEGIN");
-    let pids: string[] = [];
+    const pids: string[] = [];
     // 建人员数据
     for (const drvr of drivers) {
-      let identity_no: string = drvr["identity_no"];
+      const identity_no: string = drvr["identity_no"];
       const pplr = await db.query("SELECT id, verified FROM person WHERE identity_no = $1", [identity_no]);
       if (pplr.rowCount > 0) {
         const ppl = pplr.rows[0];
         if (ppl["verified"]) {
           await db.query("UPDATE person SET deleted = false, updated_at = $1 WHERE identity_no = $2", [new Date(), identity_no]);
         } else {
-          let name: string = drvr["name"];
-          let phone: string = drvr["phone"];
+          const name: string = drvr["name"];
+          const phone: string = drvr["phone"];
           await db.query("UPDATE person SET deleted = false, updated_at = $1, name = $2, phone = $3 WHERE identity_no = $4", [new Date(), name, phone, identity_no]);
         }
         pids.push(ppl["id"]);
@@ -612,7 +619,7 @@ processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
     const all_vid_driver = await db.query("SELECT id FROM drivers WHERE　vid = $１", [vid]);
     if (all_vid_driver.rowCount > 3) {
       await db.query("ROLLBACK");
-      log.error(`addDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}, msg: 该车司机总人数超过3人`);
+      log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}, msg: 该车司机总人数超过3人`);
       return {
         code: 426,
         msg: "司机总人数超过3人"
@@ -623,7 +630,8 @@ processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
     return { code: 200, data: pids };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`addDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`, err);
+    ctx.report(3, err);
+    log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`, err);
     return { code: 500, msg: "创建司机信息出错" };
   }
 });
@@ -631,26 +639,25 @@ processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
 processor.callAsync("delDrivers", async (ctx: ProcessorContext,
   vid: string,
   drivers: string[]) => {
-  log.info(`delDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`);
+  log.info(`delDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
     await db.query("BEGIN");
-    let pids: string[] = [];
+    const pids: string[] = [];
     const vid_drivers_result = await db.query("SELECT pid FROM drivers WHERE vid = $1 AND deleted = false", [vid]);
     if (vid_drivers_result.rowCount > 0) {
       const vid_drivers = vid_drivers_result.rows;
       // 判断是否所有的司机都存在
-      for (let did of drivers) {
+      for (const did of drivers) {
         // 判断当前司机是否存在
-        let exist_driver = drivers.filter(d => d["pid"] === did);
+        const exist_driver = drivers.filter(d => d["pid"] === did);
         if (exist_driver.length > 0) {
           await db.query("UPDATE drivers SET deleted = true, updated_at = $1 WHERE pid = $2 AND vid = $3", [new Date(), did, vid]);
           pids.push(did);
         } else {
           await db.query("ROLLBACK");
-          log.error(`delDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}, msg: 司机未找到`);
+          log.error(`delDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}, msg: 司机未找到`);
           return {
             code: 404,
             msg: "司机未找到"
@@ -659,7 +666,7 @@ processor.callAsync("delDrivers", async (ctx: ProcessorContext,
       }
     } else {
       await db.query("ROLLBACK");
-      log.error(`delDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}, msg: 司机未找到`);
+      log.error(`delDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}, msg: 司机未找到`);
       return {
         code: 404,
         msg: "司机未找到"
@@ -670,7 +677,8 @@ processor.callAsync("delDrivers", async (ctx: ProcessorContext,
     return { code: 200, data: pids };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`delDrivers, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`, err);
+    ctx.report(3, err);
+    log.error(`delDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`, err);
     return { code: 500, msg: "更新司机信息出错" };
   }
 });
@@ -679,10 +687,9 @@ processor.callAsync("delDrivers", async (ctx: ProcessorContext,
 processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
   vid: string,
   insurance_due_date: string) => {
-  log.info(`setInsuranceDueDate, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
+  log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
-  const done = ctx.done;
   try {
     await db.query("BEGIN");
     const is_vid_exist_result = await db.query("SELECT id FROM vehicles WHERE id = $1", [vid]);
@@ -690,7 +697,7 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
       await db.query("UPDATE vehicles SET insurance_due_date = $1, updated_at = $2 WHERE id = $3", [insurance_due_date, new Date(), vid]);
       await sync_vehicle(ctx, db, cache, vid);
     } else {
-      log.error(`setInsuranceDueDate, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}, msg: 车辆信息未找到`);
+      log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}, msg: 车辆信息未找到`);
       return {
         code: 404,
         msg: "车辆信息未找到"
@@ -699,7 +706,8 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
     return { code: 200, data: vid };
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`setInsuranceDueDate, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
+    ctx.report(3, err);
+    log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
     return { code: 500, msg: "设置保险到期时间出错" };
   }
 });
@@ -730,8 +738,8 @@ async function sync_vehicle(ctx: ProcessorContext,
         vehicle["drivers"] = [];
         if (driver_result.rowCount > 0) {
           const drvs = driver_result.rows;
-          for (let drv of drvs) {
-            let drv_pid: string = drv["pid"];
+          for (const drv of drvs) {
+            const drv_pid: string = drv["pid"];
             const person_result = await db.query("SELECT id AS pid, name, identity_no, phone, email, address, identity_frontal_view, identity_rear_view, license_frontal_view, verified  FROM person WHERE id = $1 AND deleted = false", [drv_pid]);
             if (person_result.rowCount > 0) {
               const psn = person_result.rows[0];
@@ -756,6 +764,7 @@ async function sync_vehicle(ctx: ProcessorContext,
       await multi.execAsync();
     }
   } catch (err) {
+    ctx.report(3, err);
     log.error(`sync_vehicle uid: ${ctx.uid}, vid: ${vid}`, err);
   }
 }
