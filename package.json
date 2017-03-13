@@ -3,7 +3,7 @@
     "@types/bunyan": "0.0.34",
     "@types/msgpack-lite": "^0.1.1",
     "@types/node-schedule": "0.0.36",
-    "@types/node-uuid": "0.0.28",
+    "@types/uuid": "^2.0.29",
     "@types/pg-pool": "0.0.2",
     "@types/redis": "^0.12.33",
     "bunyan": "^1.8.1",
@@ -12,9 +12,11 @@
     "msgpack-lite": "^0.1.20",
     "nanomsg": "^3.2.1",
     "node-schedule": "^1.2.0",
-    "node-uuid": "^1.4.7",
+    "uuid": "^3.0.1",
     "pg-pool": "^1.4.0",
     "recommend-library": "git+http://git.fengchaohuzhu.com:10080/agent/recommend-library.git",
+    "ztyq-library": "git+http://git.fengchaohuzhu.com:10080/server/ztyq-library.git",
+    "jy-library": "git+http://git.fengchaohuzhu.com:10080/server/jy-library.git",
     "redis": "^2.6.2"
   }
 }
