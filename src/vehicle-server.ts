@@ -89,21 +89,18 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
           };
           if (err.code === 408) {
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
-            // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
             return {
               code: 408,
               msg: "访问智通接口超时"
             };
           } else if (err.code) {
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-            // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
             return {
               code: err.code,
               msg: err.message
             };
           } else {
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-            // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
             return {
               code: 500,
               msg: "获取车型信息失败"
@@ -139,21 +136,18 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
         ctx.report(3, error);
         if (err.code === 408) {
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
-          // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
           return {
             code: 408,
             msg: "访问智通接口超时"
           };
         } else if (err.code) {
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-          // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
           return {
             code: err.code,
             msg: err.message
           };
         } else {
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-          // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
           return {
             code: 500,
             msg: "获取车型信息失败"
@@ -167,7 +161,6 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
     };
     ctx.report(3, err);
     log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-    // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.msg }));
     return {
       code: 500,
       msg: "获取车型信息失败"
@@ -229,12 +222,12 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
     };
   }
   try {
-    const result: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
-    if (result) {
-      const pkt = await msgpack_decode_async(result);
+    const vehicle_buff: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
+    if (vehicle_buff) {
+      const vehicle = await msgpack_decode_async(vehicle_buff);
       return {
         code: 200,
-        data: pkt
+        data: vehicle
       };
     } else {
       log.error(`getVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, msg: 车辆信息未找到`);
@@ -254,12 +247,6 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
 });
 
 server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext,
-  owner_name: string,
-  owner_identity_no: string,
-  insured_name: string,
-  insured_identity_no: string,
-  insured_phone: string,
-  recommend: string,
   vehicle_code: string,
   license_no: string,
   engine_no: string,
@@ -270,14 +257,9 @@ server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加�
   fuel_type: string,
   vin: string,
   accident_status: number) => {
-  log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
+  log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   try {
     await verify([
-      stringVerifier("owner_name", owner_name),
-      stringVerifier("owner_identity_no", owner_identity_no),
-      stringVerifier("insured_name", insured_name),
-      stringVerifier("insured_identity_no", insured_identity_no),
-      stringVerifier("insured_phone", insured_phone),
       stringVerifier("vehicle_code", vehicle_code),
       stringVerifier("license_no", license_no),
       stringVerifier("engine_no", engine_no),
@@ -298,8 +280,7 @@ server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加�
   const uengine_no = engine_no.toUpperCase();
   const ulicense_no = license_no.toUpperCase();
   const args = [
-    owner_name, owner_identity_no, insured_name, insured_identity_no, insured_phone, recommend, vehicle_code, ulicense_no, uengine_no,
-    register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin_code, accident_status
+    vehicle_code, ulicense_no, uengine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin_code, accident_status
   ];
   const pkt: CmdPacket = { cmd: "createVehicle", args: args };
   ctx.publish(pkt);
@@ -307,12 +288,6 @@ server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加�
 });
 
 server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext,
-  owner_name: string,
-  owner_identity_no: string,
-  insured_name: string,
-  insured_identity_no: string,
-  insured_phone: string,
-  recommend: string,
   vehicle_code: string,
   engine_no: string,
   receipt_no: string,
@@ -320,14 +295,9 @@ server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信�
   is_transfer: boolean,
   fuel_type: string,
   vin: string) => {
-  log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, is_transfer: ${is_transfer}, fuel_type: ${fuel_type}, vin: ${vin}`);
+  log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, is_transfer: ${is_transfer}, fuel_type: ${fuel_type}, vin: ${vin}`);
   try {
     await verify([
-      stringVerifier("owner_name", owner_name),
-      stringVerifier("owner_identity_no", owner_identity_no),
-      stringVerifier("insured_name", insured_name),
-      stringVerifier("insured_identity_no", insured_identity_no),
-      stringVerifier("insured_phone", insured_phone),
       stringVerifier("vehicle_code", vehicle_code),
       stringVerifier("engine_no", engine_no),
       dateVerifier("receipt_date", receipt_date),
@@ -341,32 +311,25 @@ server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信�
       msg: err.message,
     };
   }
-  // const uid = ctx.uid;
   const uengine_no = engine_no.toUpperCase();
   const ureceipt_no = receipt_no.toUpperCase();
   const uvin = vin.toUpperCase();
-  const args = [owner_name, owner_identity_no, insured_name, insured_identity_no, insured_phone, recommend, vehicle_code, uengine_no, ureceipt_no, receipt_date, is_transfer, fuel_type, uvin];
+  const args = [vehicle_code, uengine_no, ureceipt_no, receipt_date, is_transfer, fuel_type, uvin];
   const pkt: CmdPacket = { cmd: "createNewVehicle", args: args };
   ctx.publish(pkt);
   return await waitingAsync(ctx);
 });
 
-server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照", async (ctx: ServerContext,
+server.callAsync("updateDrivingView", allowAll, "更新行驶证信息", "更新行驶证信息", async (ctx: ServerContext,
   vid: string,
   driving_frontal_view: string,
-  driving_rear_view: string,
-  identity_frontal_view: string,
-  identity_rear_view: string,
-  license_frontal_views: Object) => {
-  log.info(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify
-    (license_frontal_views)}`);
+  driving_rear_view: string) => {
+  log.info(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
   try {
     await verify([
       uuidVerifier("vid", vid),
       stringVerifier("driving_frontal_view", driving_frontal_view),
       stringVerifier("driving_rear_view", driving_rear_view),
-      stringVerifier("identity_frontal_view", identity_frontal_view),
-      stringVerifier("identity_rear_view", identity_rear_view)
     ]);
   } catch (err) {
     ctx.report(3, err);
@@ -376,36 +339,14 @@ server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照",
     };
   }
   try {
-    const result: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
-    if (result) {
-
-      // TODO 是否校验驾照不为空(可以分开)
-      // let flag = false;
-      // const vehicle = await msgpack_decode(result);
-      // const ownerid = vehicle["drivers"]["id"];
-      // for (const view in license_frontal_views) {
-      //   if (ownerid === view) {
-      //     flag = true;
-      //   }
-      // }
-      // if (!flag) {
-      //   log.error(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify
-      //     (license_frontal_views)}, msg: 主要驾驶人照片为空`);
-      //   return { code: 400, msg: "主要驾驶人照片为空" };
-      // } else {
-      //   const args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views];
-      //   const pkt: CmdPacket = { cmd: "uploadImages", args: args };
-      //   ctx.publish(pkt);
-      //   return await waitingAsync(ctx);
-      // }
-
-      const args = [vid, driving_frontal_view, driving_rear_view, identity_frontal_view, identity_rear_view, license_frontal_views];
-      const pkt: CmdPacket = { cmd: "uploadImages", args: args };
+    const vehicle_buff: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
+    if (vehicle_buff) {
+      const args = [vid, driving_frontal_view, driving_rear_view];
+      const pkt: CmdPacket = { cmd: "updateDrivingView", args: args };
       ctx.publish(pkt);
       return await waitingAsync(ctx);
     } else {
-      log.error(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify
-        (license_frontal_views)}, msg: 车辆未找到`);
+      log.error(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
       return {
         code: 404,
         msg: "车辆未找到"
@@ -413,63 +354,13 @@ server.callAsync("uploadImages", allowAll, "上传证件照", "上传证件照",
     }
   } catch (err) {
     ctx.report(3, err);
-    log.error(`uploadImages, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}, identity_frontal_view: ${identity_frontal_view}, identity_rear_view: ${identity_rear_view}, license_frontal_views: ${JSON.stringify
-      (license_frontal_views)}`, err);
+    log.error(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`, err);
     return {
       code: 500,
-      msg: "上传证件照失败"
+      msg: "更新行驶证信息"
     };
   }
 });
-
-server.callAsync("getVehiclesByUser", allowAll, "获取用户车信息", "获取用户车信息", async (ctx: ServerContext) => {
-  log.info(`getVehiclesByUser, sn: ${ctx.sn}, uid: ${ctx.uid}`);
-  try {
-    const result: Buffer = await ctx.cache.zrevrangebyscoreAsync(`vehicles:${ctx.uid}`, "+inf", "-inf");
-    if (result) {
-      const multi = bluebird.promisifyAll(ctx.cache.multi()) as Multi;
-      for (const id_buff of result) {
-        const id = id_buff.toString();
-        multi.hget("vehicle-entities", id);
-      }
-      const result2 = await multi.execAsync();
-      if (result2) {
-        let vehicleFilter = result2.filter(e => e !== null);
-        if (vehicleFilter.length !== 0) {
-          const vehicleFilters = [];
-          for (const v of vehicleFilter) {
-            const pkt = await msgpack_decode_async(v);
-            vehicleFilters.push(pkt);
-          }
-          return {
-            code: 200,
-            data: vehicleFilters
-          };
-        }
-      } else {
-        log.error(`getVehiclesByUser, sn: ${ctx.sn}, uid: ${ctx.uid}, msg: 未找到该用户的车辆信息`);
-        return {
-          code: 404,
-          msg: "未找到该用户的车辆信息"
-        };
-      }
-    } else {
-      log.error(`getVehiclesByUser, sn: ${ctx.sn}, uid: ${ctx.uid}, msg: 未找到该用户的车辆信息`);
-      return {
-        code: 404,
-        msg: "未找到该用户的车辆信息"
-      };
-    }
-  } catch (err) {
-    ctx.report(3, err);
-    log.error(`getVehiclesByUser, sn: ${ctx.sn}, uid: ${ctx.uid}`, err);
-    return {
-      code: 500,
-      msg: "获取用户车信息失败"
-    };
-  }
-});
-
 
 async function ids2objects(cache: RedisClient,
   key: string,
@@ -696,7 +587,6 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     ctx.report(3, error);
     if (err.code === 408) {
       log.error(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}, msg: 访问智通接口超时`);
-      // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": "Timeout" }));
       return {
         code: 504,
         msg: "访问智通接口超时"
@@ -709,165 +599,11 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
       };
     } else {
       log.error(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}`, err);
-      // await ctx.cache.lpushAsync("external-module-exceptions", JSON.stringify({ "occurred-at": new Date(), "source": "ztwhtech.com", "request": data, "response": err.message }));
       return {
         code: 500,
         msg: "获取车型失败"
       };
     }
-  }
-});
-
-server.callAsync("setPersonVerified", allowAll, "车主验证通过", "车主验证通过", async (ctx: ServerContext, identity_no: string, flag: boolean) => {
-  log.info(`setPersonVerified, sn: ${ctx.sn}, uid: ${ctx.uid}, identity_no: ${identity_no}, flag: ${flag}`);
-  try {
-    await verify([
-      stringVerifier("identity_no", identity_no),
-      booleanVerifier("flag", flag)
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  const args = [identity_no, flag];
-  const pkt: CmdPacket = { cmd: "setPersonVerified", args: args };
-  ctx.publish(pkt);
-  return await waitingAsync(ctx);
-});
-
-server.callAsync("createPerson", allowAll, "创建司机", "创建司机", async (ctx: ServerContext,
-  people: Object[]) => {
-  log.info(`createPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, people: ${JSON.stringify(people)}`);
-  try {
-    await verify([
-      arrayVerifier("people", people)
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  if (people.length === 0) {
-    return {
-      code: 404,
-      msg: "请输入待增人员信息"
-    };
-  }
-  const args = [people];
-  const pkt: CmdPacket = { cmd: "createPerson", args: args };
-  ctx.publish(pkt);
-  return await waitingAsync(ctx);
-});
-
-server.callAsync("addDrivers", allowAll, "添加驾驶人信息", "添加驾驶人信息", async (ctx: ServerContext,
-  vid: string,
-  drivers: Object[]) => {
-  log.info(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`);
-  try {
-    await verify([
-      uuidVerifier("vid", vid),
-      arrayVerifier("drivers", drivers)
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  if (drivers.length > 3) {
-    return {
-      code: 426,
-      msg: "添加司机数量超过3人"
-    };
-  }
-  if (drivers.length === 0) {
-    return {
-      code: 404,
-      msg: "请检查是否输入待增司机"
-    };
-  }
-  const args = [vid, drivers];
-  const pkt: CmdPacket = { cmd: "addDrivers", args: args };
-  ctx.publish(pkt);
-  return await waitingAsync(ctx);
-});
-
-server.callAsync("delDrivers", allowAll, "删除驾驶人信息", "删除驾驶人信息", async (ctx: ServerContext,
-  vid: string,
-  drivers: string[]) => {
-  log.info(`delDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, drivers: ${JSON.stringify(drivers)}`);
-  try {
-    await verify([
-      uuidVerifier("vid", vid),
-      arrayVerifier("drivers", drivers)
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  if (drivers.length > 3) {
-    return {
-      code: 426,
-      msg: "删除司机数量超过3人"
-    };
-  }
-  if (drivers.length === 0) {
-    return {
-      code: 404,
-      msg: "请检查是否输入待删司机"
-    };
-  }
-  const args = [vid, drivers];
-  const pkt: CmdPacket = { cmd: "delDrivers", args: args };
-  ctx.publish(pkt);
-  return await waitingAsync(ctx);
-});
-
-server.callAsync("getPerson", allowAll, "获取人员信息", "根据pid获取人员信息", async (ctx: ServerContext,
-  pid: string) => {
-  log.info(`getPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${pid}`);
-  try {
-    await verify([
-      uuidVerifier("pid", pid)
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  try {
-    const result: Buffer = await ctx.cache.hgetAsync("person-entities", pid);
-    if (result) {
-      const person = await msgpack_decode_async(result);
-      return {
-        code: 200,
-        data: person
-      };
-    } else {
-      log.error(`getPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${pid}, msg: 人员信息未找到`);
-      return {
-        code: 404,
-        msg: "人员信息未找到"
-      };
-    }
-  } catch (err) {
-    ctx.report(3, err);
-    log.error(`getPerson, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${pid}`, err);
-    return {
-      code: 500,
-      msg: "获取人员信息失败"
-    };
   }
 });
 
