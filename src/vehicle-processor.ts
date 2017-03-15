@@ -1,4 +1,4 @@
-import { Processor, ProcessorFunction, ProcessorContext, rpc, set_for_response, msgpack_decode_async as msgpack_decode, msgpack_encode_async as msgpack_encode } from "hive-service";
+import { Processor, ProcessorFunction, ProcessorContext, rpcAsync, set_for_response, msgpack_decode_async, msgpack_encode_async } from "hive-service";
 import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
 import * as uuid from "uuid";
@@ -48,11 +48,11 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
     const codes = [];
     const models = transVehicleModelByVin(models_jy);
     for (const model of models) {
-      const pkt = await msgpack_encode(model);
+      const pkt = await msgpack_encode_async(model);
       multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
       codes.push(model["vehicle_code"]);
     }
-    const codes_buff = await msgpack_encode(codes);
+    const codes_buff = await msgpack_encode_async(codes);
     multi.hset("vehicle-vin-codes", vin, codes_buff);
     multi.sadd("vehicle-model", vin);
     await multi.execAsync();
@@ -67,7 +67,6 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
 
 // 新车已上牌个人
 processor.callAsync("createVehicle", async (ctx: ProcessorContext,
-  uid: string,
   owner_name: string,
   owner_identity_no: string,
   insured_name: string,
@@ -84,22 +83,10 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext,
   fuel_type: string,
   vin: string,
   accident_status: number) => {
-  log.info(`createVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
+  log.info(`createVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-    if (l2vresult.rowCount > 0) {
-      const vin2Vehicles = l2vresult.rows;
-      for (const vhc of vin2Vehicles) {
-        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
-          return {
-            code: 200,
-            data: vhc["id"]
-          };
-        }
-      }
-    }
     await db.query("BEGIN");
 
     // 车主
@@ -115,45 +102,88 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext,
     }
 
     // 投保人
-    const insured_result = await rpc<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "getInsured");
+    // const insured_result = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "getInsured");
+    // let insured_id = uuid.v1();
+    // if (insured_result["code"] === 404) {
+    //   const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
+    //   if (presult["rowCount"] !== 0) {
+    //     insured_id = presult.rows[0]["id"];
+    //     if (!presult.rows[0].verified) {
+    //       await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
+    //     }
+    //   } else {
+    //     await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
+    //   }
+    //   const insured_setrst = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
+    //   if (insured_setrst["code"] !== 200) {
+    //     await db.query("ROLLBACK");
+    //     log.error(`createVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}, msg: 设置投保人信息失败`);
+    //     return {
+    //       code: 411,
+    //       msg: "设置投保人信息失败"
+    //     };
+    //   }
+    // } else if (insured_result["code"] === 200) {
+    //   insured_id = insured_result["data"]["id"];
+    // } else {
+    //   log.error(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息异常`);
+    //   return {
+    //     code: 408,
+    //     msg: "设置投保人信息异常"
+    //   };
+    // }
+    // 投保人
     let insured_id = uuid.v1();
-    if (insured_result["code"] === 404) {
-      const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
-      if (presult["rowCount"] !== 0) {
-        insured_id = presult.rows[0]["id"];
-        if (!presult.rows[0].verified) {
-          await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
-        }
-      } else {
-        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
+    const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
+    if (presult["rowCount"] !== 0) {
+      insured_id = presult.rows[0]["id"];
+      if (!presult.rows[0].verified) {
+        await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
       }
-      const insured_setrst = await rpc<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
-      if (insured_setrst["code"] !== 200) {
-        await db.query("ROLLBACK");
-        log.error(`createVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}, msg: 设置投保人信息失败`);
-        return {
-          code: 411,
-          msg: "设置投保人信息失败"
-        };
-      }
-    } else if (insured_result["code"] === 200) {
-      insured_id = insured_result["data"]["id"];
+    } else {
+      await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
     }
-    const vid = uuid.v1();
-    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16)", [vid, uid, owner_id, 0, recommend, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, insured_id]);
-    await db.query("COMMIT");
-    await sync_vehicle(ctx, db, cache, vid);
-    return { code: 200, data: vid };
+    const insured_setrst = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
+    log.info(`createVehicle, insured_setrst: ${JSON.stringify(insured_setrst)}`);
+    if (insured_setrst["code"] !== 200) {
+      await db.query("ROLLBACK");
+      log.error(`createVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}, msg: 设置投保人信息失败`);
+      return {
+        code: 411,
+        msg: "设置投保人信息失败"
+      };
+    }
+
+    const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
+    if (l2vresult.rowCount > 0) {
+      const vin2Vehicles = l2vresult.rows;
+      for (const vhc of vin2Vehicles) {
+        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
+          await db.query("UPDATE vehicles SET owner = $1, insured = $2 WHERE id = $3", [owner_id, insured_id, vhc["id"]]);
+          await sync_vehicle(ctx, db, cache, vhc["id"]);
+          return {
+            code: 200,
+            data: vhc["id"]
+          };
+        }
+      }
+    } else {
+      const vid = uuid.v1();
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11, $12, $13, $14, $15, $16)", [vid, ctx.uid, owner_id, 0, recommend, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status, insured_id]);
+      await db.query("COMMIT");
+      await sync_vehicle(ctx, db, cache, vid);
+      return { code: 200, data: vid };
+    }
+
   } catch (err) {
     await db.query("ROLLBACK");
-    log.error(`createVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`, err);
+    log.error(`createVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`, err);
     return { code: 500, msg: "创建车辆信息失败" };
   }
 });
 
 // 新车未上牌个人
 processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
-  uid: string,
   owner_name: string,
   owner_identity_no: string,
   insured_name: string,
@@ -162,28 +192,15 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
   recommend: string,
   vehicle_code: string,
   engine_no: string,
-  is_transfer: boolean,
   receipt_no: string,
-  receipt_date: any,
-  last_insurance_company: string,
+  receipt_date: Date,
+  is_transfer: boolean,
   fuel_type: string,
   vin: string) => {
-  log.info(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`);
+  log.info(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-    if (l2vresult.rowCount > 0) {
-      const vin2Vehicles = l2vresult.rows;
-      for (const vhc of vin2Vehicles) {
-        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
-          return {
-            code: 200,
-            data: vhc["id"]
-          };
-        }
-      }
-    }
     await db.query("BEGIN");
     // 车主
     let owner_id = uuid.v1();
@@ -198,45 +215,84 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
     }
 
     // 投保人
-    const insured_result = await rpc<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "getInsured");
+    // const insured_result = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "getInsured");
+    // log.info(`insured_result: ${JSON.stringify(insured_result)}`);
+    // let insured_id = uuid.v1();
+    // if (insured_result["code"] === 404) {
+    //   const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
+    //   if (presult["rowCount"] !== 0) {
+    //     insured_id = presult.rows[0]["id"];
+    //     if (!presult.rows[0].verified) {
+    //       await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
+    //     }
+    //   } else {
+    //     await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
+    //   }
+    //   const insured_setrst = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
+    //   log.info(``);
+    //   if (insured_setrst["code"] !== 200) {
+    //     await db.query("ROLLBACK");
+    //     log.error(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息失败`);
+    //     return {
+    //       code: 411,
+    //       msg: "设置投保人信息失败"
+    //     };
+    //   }
+    // } else if (insured_result["code"] === 200) {
+    //   insured_id = insured_result["data"]["id"];
+    // } else {
+    //   log.error(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息异常`);
+    //   return {
+    //     code: 408,
+    //     msg: "设置投保人信息异常"
+    //   };
+    // }
+
+    // 投保人
     let insured_id = uuid.v1();
-    if (insured_result["code"] === 404) {
-      const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
-      if (presult["rowCount"] !== 0) {
-        insured_id = presult.rows[0]["id"];
-        if (!presult.rows[0].verified) {
-          await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
-        }
-      } else {
-        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
+    const presult = await db.query("SELECT id, name, identity_no, phone, verified FROM person WHERE identity_no = $1 AND deleted = false", [insured_identity_no]);
+    if (presult["rowCount"] !== 0) {
+      insured_id = presult.rows[0]["id"];
+      if (!presult.rows[0].verified) {
+        await db.query("UPDATE person SET name = $1, phone = $2, updated_at = $3 WHERE identity_no = $4 AND deleted = false", [insured_name, insured_phone, new Date(), insured_identity_no]);
       }
-      const insured_setrst = await rpc<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
-      if (insured_setrst["code"] !== 200) {
-        await db.query("ROLLBACK");
-        log.error(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息失败`);
-        return {
-          code: 411,
-          msg: "设置投保人信息失败"
-        };
-      }
-    } else if (insured_result["code"] === 200) {
-      insured_id = insured_result["data"]["id"];
     } else {
-      log.error(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息异常`);
+      await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [insured_id, insured_name, insured_identity_no, insured_phone]);
+    }
+    const insured_setrst = await rpcAsync<Object>(ctx.domain, process.env["PROFILE"], ctx.uid, "setInsured", insured_id);
+    log.info(`createNewVehicle, insured_setrst: ${JSON.stringify(insured_setrst)}`);
+    if (insured_setrst["code"] !== 200) {
+      await db.query("ROLLBACK");
+      log.error(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}, msg: 设置投保人信息失败`);
       return {
-        code: 408,
-        msg: "设置投保人信息异常"
+        code: 411,
+        msg: "设置投保人信息失败"
       };
     }
-    const vid = uuid.v1();
-    await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date,last_insurance_company, fuel_type, vin, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13, $14)", [vid, uid, owner_id, 0, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, last_insurance_company, fuel_type, vin, insured_id]);
-    await db.query("COMMIT");
-    await sync_vehicle(ctx, db, cache, vid);
-    return { code: 200, data: vid };
+    const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
+    if (l2vresult.rowCount > 0) {
+      const vin2Vehicles = l2vresult.rows;
+      for (const vhc of vin2Vehicles) {
+        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
+          await db.query("UPDATE vehicles SET owner = $1, insured = $2 WHERE id = $3", [owner_id, insured_id, vhc["id"]]);
+          await sync_vehicle(ctx, db, cache, vhc["id"]);
+          return {
+            code: 200,
+            data: vhc["id"]
+          };
+        }
+      }
+    } else {
+      const vid = uuid.v1();
+      await db.query("INSERT INTO vehicles (id, uid, owner, owner_type, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin, insured) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10, $11, $12, $13)", [vid, ctx.uid, owner_id, 0, recommend, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin, insured_id]);
+      await db.query("COMMIT");
+      await sync_vehicle(ctx, db, cache, vid);
+      return { code: 200, data: vid };
+    }
   } catch (err) {
     ctx.report(3, err);
     await db.query("ROLLBACK");
-    log.error(`createNewVehicle, uid: ${uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, last_insurance_company: ${last_insurance_company}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
+    log.error(`createNewVehicle, uid: ${ctx.uid}, owner_name: ${owner_name}, owner_identity_no: ${owner_identity_no}, insured_name: ${insured_name}, insured_identity_no: ${insured_identity_no}, insured_phone: ${insured_phone}, recommend: ${recommend}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
     return { code: 500, msg: "创建车辆信息失败" };
   }
 });
@@ -257,25 +313,24 @@ processor.callAsync("uploadImages", async (ctx: ProcessorContext,
     await db.query("UPDATE person SET identity_frontal_view = $1, identity_rear_view = $2, updated_at = $3 WHERE id in (SELECT owner FROM vehicles WHERE id = $4)", [identity_frontal_view, identity_rear_view, new Date(), vid]);
     for (const key in license_frontal_views) {
       if (license_frontal_views.hasOwnProperty(key)) {
-        await db.query("UPDATE person SET license_frontal_view=$1 WHERE id = $2", [license_frontal_views[key], key]);
+        await db.query("UPDATE person SET license_frontal_view = $1 WHERE id = $2", [license_frontal_views[key], key]);
       }
     }
     await db.query("COMMIT");
     const vehicle_buff: Buffer = await cache.hgetAsync("vehicle-entities", vid);
-    const vehicle = await msgpack_decode(vehicle_buff);
+    const vehicle = await msgpack_decode_async(vehicle_buff);
     vehicle["driving_frontal_view"] = driving_frontal_view;
     vehicle["driving_rear_view"] = driving_rear_view;
     vehicle["owner"]["identity_frontal_view"] = identity_frontal_view;
     vehicle["owner"]["identity_rear_view"] = identity_rear_view;
-    vehicle["owner"]["license_view"] = license_frontal_views[vehicle["owner"]["id"]];
     for (const key in license_frontal_views) {
       for (const driver of vehicle["drivers"]) {
         if (driver["id"] === key) {
-          driver["license_view"] = license_frontal_views[key];
+          driver["license_frontal_view"] = license_frontal_views[key];
         }
       }
     }
-    const pkt = await msgpack_encode(vehicle);
+    const pkt = await msgpack_encode_async(vehicle);
     await cache.hsetAsync("vehicle-entities", vid, pkt);
     return { code: 200, data: vid };
   } catch (err) {
@@ -375,14 +430,13 @@ function row2vehicle(row: Object) {
     license_no: trim(row["license_no"]),
     engine_no: trim(row["engine_no"]),
     register_date: row["register_date"],
-    average_mileage: trim(row["average_mileage"]),
     is_transfer: row["is_transfer"],
     receipt_no: trim(row["receipt_no"]),
     receipt_date: row["receipt_date"],
     last_insurance_company: trim(row["last_insurance_company"]),
     insurance_due_date: row["insurance_due_date"],
     driving_frontal_view: trim(row["driving_frontal_view"]),
-    driving_real_view: trim(row["driving_real_view"]),
+    driving_rear_view: trim(row["driving_rear_view"]),
     accident_status: row["accident_status"]
   };
 }
@@ -395,7 +449,7 @@ function row2person(row: Object) {
     phone: trim(row["phone"]),
     email: trim(row["email"]),
     address: trim(row["address"]),
-    identity_front_view: trim(row["identity_front_view"]),
+    identity_frontal_view: trim(row["identity_frontal_view"]),
     identity_rear_view: trim(row["identity_rear_view"]),
     license_frontal_view: trim(row["license_frontal_view"]),
     verified: row["verified"]
@@ -457,12 +511,12 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
     }
     await db.query("COMMIT");
     const vehicle_and_models = {
-      response_no: vehicle_and_models_zt["vehicle"]["responseNo"],
+      response_no: vehicle_and_models_zt["response_no"],
       vehicle: {
-        engine_no: vehicle_and_models_zt["vehicle"]["engineNo"],
-        register_date: vehicle_and_models_zt["vehicle"]["registerDate"],
-        license_no: vehicle_and_models_zt["vehicle"]["licenseNo"],
-        vin: vehicle_and_models_zt["vehicle"]["frameNo"]
+        engine_no: vehicle_and_models_zt["vehicle"]["engine_no"],
+        register_date: vehicle_and_models_zt["vehicle"]["register_date"],
+        license_no: vehicle_and_models_zt["vehicle"]["license_no"],
+        vin: vehicle_and_models_zt["vehicle"]["vin"]
       },
       models: transVehicleModelByLicense(vehicle_and_models_zt["models"])
     };
@@ -470,25 +524,25 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
     const codes = [];
     const vehicle_models = vehicle_and_models["models"];
     for (const model of vehicle_models) {
-      const pkt = await msgpack_encode(model);
+      const pkt = await msgpack_encode_async(model);
       multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
       codes.push(model["vehicle_code"]);
     }
     const license = vehicle_and_models["vehicle"]["license_no"];
     const vin = vehicle_and_models["vehicle"]["vin"];
-    const response_no = await msgpack_encode({
-      response_no: vehicle_and_models_zt["vehicle"]["responseNo"],
+    const response_no_buff: Buffer = await msgpack_encode_async({
+      response_no: vehicle_and_models_zt["response_no"],
       vehicle: {
-        engine_no: vehicle_and_models_zt["vehicle"]["engineNo"],
-        register_date: vehicle_and_models_zt["vehicle"]["registerDate"],
-        license_no: vehicle_and_models_zt["vehicle"]["licenseNo"],
-        vin: vehicle_and_models_zt["vehicle"]["frameNo"]
+        engine_no: vehicle_and_models_zt["vehicle"]["engine_no"],
+        register_date: vehicle_and_models_zt["vehicle"]["register_date"],
+        license_no: vehicle_and_models_zt["vehicle"]["license_no"],
+        vin: vehicle_and_models_zt["vehicle"]["vin"]
       },
     });
-    const codes_buff: Buffer = await msgpack_encode(codes);
+    const codes_buff: Buffer = await msgpack_encode_async(codes);
     multi.hset("vehicle-vin-codes", vin, codes_buff);
     multi.hset("vehicle-license-vin", license, vin);
-    multi.setex(`zt-response-code:${license}`, 259200, response_no); // 智通响应码(三天有效)
+    multi.setex(`zt-response-code:${license}`, 60 * 60 * 24 * 3, response_no_buff); // 智通响应码(三天有效)
     await multi.execAsync();
     return { code: 200, data: vehicle_and_models };
   } catch (err) {
@@ -513,9 +567,9 @@ processor.callAsync("setPersonVerified", async (ctx: ProcessorContext,
     const vehicles = await db.query("SELECT id FROM vehicles WHERE owner in (SELECT id FROM person WHERE identity_no = $1 AND deleted = false) AND deleted = false", [identity_no]);
     for (const row of vehicles["rows"]) {
       let vehicleBuffer: Buffer = await cache.hgetAsync("vehicle-entities", row["id"]);
-      const vehicle = await msgpack_decode(vehicleBuffer);
+      const vehicle = await msgpack_decode_async(vehicleBuffer);
       vehicle["owner"]["verified"] = flag;
-      vehicleBuffer = await msgpack_encode(vehicle);
+      vehicleBuffer = await msgpack_encode_async(vehicle);
       await cache.hsetAsync("vehicle-entities", row["id"], vehicleBuffer);
       vids.push(row["id"]);
     }
@@ -558,13 +612,15 @@ processor.callAsync("createPerson", async (ctx: ProcessorContext,
     }
     await db.query("COMMIT");
     const persons = [];
-    for (const psnid of pids) {
-      const psn_result = await db.query("SELECT id AS pid, name, identity_no, phone, email, address, identity_frontal_view, identity_rear_view, license_frontal_view, verified FROM person WHERE id = $1 AND deleted = false", [psnid]);
-      if (psn_result.rowCount > 0) {
-        const psn = row2person(psn_result.rows[0]);
-        const psn_buff = await msgpack_encode(psn);
-        await cache.hsetAsync("person-entities", psnid, psn_buff);
-        persons.push(psn);
+    if (pids.length > 0) {
+      for (const psnid of pids) {
+        const psn_result = await db.query("SELECT id AS pid, name, identity_no, phone, email, address, identity_frontal_view, identity_rear_view, license_frontal_view, verified FROM person WHERE id = $1 AND deleted = false", [psnid]);
+        if (psn_result.rowCount > 0) {
+          const psn = row2person(psn_result.rows[0]);
+          const psn_buff = await msgpack_encode_async(psn);
+          await cache.hsetAsync("person-entities", psnid, psn_buff);
+          persons.push(psn);
+        }
       }
     }
     return { code: 200, data: persons };
@@ -579,47 +635,54 @@ processor.callAsync("createPerson", async (ctx: ProcessorContext,
 
 processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
   drivers: Object[]) => {
-  log.info(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`);
+  log.info(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
     const pids: string[] = [];
     // 建人员数据
-    for (const drvr of drivers) {
-      const identity_no: string = drvr["identity_no"];
-      const pplr = await db.query("SELECT id, verified FROM person WHERE identity_no = $1", [identity_no]);
-      if (pplr.rowCount > 0) {
-        const ppl = pplr.rows[0];
-        if (ppl["verified"]) {
-          await db.query("UPDATE person SET deleted = false, updated_at = $1 WHERE identity_no = $2", [new Date(), identity_no]);
+    if (drivers.length > 0) {
+      for (const drvr of drivers) {
+        const identity_no: string = drvr["identity_no"];
+        const pplr = await db.query("SELECT id, verified FROM person WHERE identity_no = $1 AND deleted = false", [identity_no]);
+        if (pplr.rowCount > 0) {
+          const ppl = pplr.rows[0];
+          if (!ppl["verified"]) {
+            //   await db.query("UPDATE person SET deleted = false, updated_at = $1 WHERE identity_no = $2", [new Date(), identity_no]);
+            // } else {
+            // 司机无电话号码
+            const name: string = drvr["name"];
+            // const phone: string = drvr["phone"];
+            await db.query("UPDATE person SET deleted = false, updated_at = $1, name = $2 WHERE identity_no = $3", [new Date(), name, identity_no]);
+          }
+          pids.push(ppl["id"]);
         } else {
-          const name: string = drvr["name"];
-          const phone: string = drvr["phone"];
-          await db.query("UPDATE person SET deleted = false, updated_at = $1, name = $2, phone = $3 WHERE identity_no = $4", [new Date(), name, phone, identity_no]);
+          const pid = uuid.v1();
+          const name = drvr["name"];
+          const identity_no = drvr["identity_no"];
+          // const phone = drvr["phone"];
+          await db.query("INSERT INTO person (id, name, identity_no) VALUES ($1, $2, $3)", [pid, name, identity_no]);
+          pids.push(pid);
         }
-        pids.push(ppl["id"]);
-      } else {
-        const pid = uuid.v1();
-        const name = drvr["name"];
-        const identity_no = drvr["identity_no"];
-        const phone = drvr["phone"];
-        await db.query("INSERT INTO person (id, name, identity_no, phone) VALUES ($1, $2, $3, $4)", [pid, name, identity_no, phone]);
       }
     }
+
     // 建关联关系
-    for (const pid of pids) {
-      const exist_driver_result = await db.query("SELECT id FROM drivers WHERE pid =$1 AND vid = $2", [pid, vid]);
-      if (exist_driver_result.rowCount > 0) {
-        await db.query("UPDATE drivers SET deleted = false, updated_at = $1 WHERE  pid =$2 AND vid = $3", [new Date(), pid, vid]);
-      } else {
-        await db.query("INSERT INTO drivers (pid, vid) VALUES ($1, $2)", [pid, vid]);
+    if (pids.length > 0) {
+      for (const pid of pids) {
+        const exist_driver_result = await db.query("SELECT id FROM drivers WHERE pid = $1 AND vid = $2", [pid, vid]);
+        if (exist_driver_result.rowCount > 0) {
+          await db.query("UPDATE drivers SET deleted = false, updated_at = $1 WHERE pid = $2 AND vid = $3", [new Date(), pid, vid]);
+        } else {
+          await db.query("INSERT INTO drivers (pid, vid) VALUES ($1, $2)", [pid, vid]);
+        }
       }
     }
-    const all_vid_driver = await db.query("SELECT id FROM drivers WHERE　vid = $１", [vid]);
+    const all_vid_driver = await db.query("SELECT id FROM drivers WHERE vid = $1", [vid]);
     if (all_vid_driver.rowCount > 3) {
       await db.query("ROLLBACK");
-      log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}, msg: 该车司机总人数超过3人`);
+      log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}, msg: 该车司机总人数超过3人`);
       return {
         code: 426,
         msg: "司机总人数超过3人"
@@ -631,7 +694,7 @@ processor.callAsync("addDrivers", async (ctx: ProcessorContext, vid: string,
   } catch (err) {
     await db.query("ROLLBACK");
     ctx.report(3, err);
-    log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${drivers}`, err);
+    log.error(`addDrivers, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, drivers: ${JSON.stringify(drivers)}`, err);
     return { code: 500, msg: "创建司机信息出错" };
   }
 });
@@ -718,7 +781,7 @@ async function sync_vehicle(ctx: ProcessorContext,
   cache: RedisClient,
   vid?: string): Promise<any> {
   try {
-    const result = await db.query("SELECT v.id, v.uid, v.owner, v.owner_type, v.insured, v.license_no, v.engine_no, v.register_date, v.average_mileage, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.recommend, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel, p.id AS pid, p.name, p.identity_no, p.phone, p.identity_frontal_view, p.identity_rear_view, p.license_frontal_view, p.verified, p.email, p.address FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code LEFT JOIN person AS p on v.owner = p.id WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
+    const result = await db.query("SELECT v.id, v.uid, v.owner, v.owner_type, v.insured, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.recommend, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel, p.id AS pid, p.name, p.identity_no, p.phone, p.identity_frontal_view, p.identity_rear_view, p.license_frontal_view, p.verified, p.email, p.address FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code LEFT JOIN person AS p on v.owner = p.id WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     if (result.rowCount > 0) {
       for (const row of result.rows) {
@@ -730,7 +793,7 @@ async function sync_vehicle(ctx: ProcessorContext,
         if (aresult.rows.length > 0) {
           const insured = row2person(aresult.rows[0]);
           vehicle["insured"] = insured;
-          const insured_buff: Buffer = await msgpack_encode(insured);
+          const insured_buff: Buffer = await msgpack_encode_async(insured);
           cache.hsetAsync("person-entities", insured_id, insured_buff);
         }
         const row_vid = row.id;
@@ -756,9 +819,9 @@ async function sync_vehicle(ctx: ProcessorContext,
         // codes.push(row["vehicle_code"]);
         // const codes_buff = await msgpack_encode(codes);
         // await cache.hsetAsync("vehicle-vin-codes", row["vin"], codes_buff);
-        const vmpkt = await msgpack_encode(vehicle["model"]);
+        const vmpkt = await msgpack_encode_async(vehicle["model"]);
         multi.hset("vehicle-model-entities", vehicle["model"]["vehicle_code"], vmpkt);
-        const vpkt = await msgpack_encode(vehicle);
+        const vpkt = await msgpack_encode_async(vehicle);
         multi.hset("vehicle-entities", vehicle["id"], vpkt);
       }
       await multi.execAsync();
