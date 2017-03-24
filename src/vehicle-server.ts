@@ -590,7 +590,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
 server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext,
   vid: string,
   insurance_due_date: Date) => {
-  log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`);
+  log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   try {
     await verify([
       uuidVerifier("vid", vid),
@@ -610,7 +610,7 @@ server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "�
     return await waitingAsync(ctx);
   } catch (err) {
     ctx.report(3, err);
-    log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
+    log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
     return {
       code: 500,
       msg: "服务器开小差了（VSD500），请稍后重试"
