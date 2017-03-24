@@ -74,4 +74,3 @@ export function run () {
 //   });
   // log.info(`vehicle-trigger is running on ${process.env["VEHICLE-TRIGGER"]}`);
 }
-

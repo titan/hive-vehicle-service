@@ -36,6 +36,8 @@ const config: Config = {
   dbpasswd: process.env["DB_PASSWORD"],
   loginfo: (...x) => log.info(x),
   logerror: (...x) => log.error(x),
+  queuehost: process.env["QUEUE_HOST"],
+  queueport: process.env["QUEUE_PORT"],
 };
 
 const svc: Service = new Service(config);
