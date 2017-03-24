@@ -37,7 +37,8 @@ const log = bunyan.createLogger({
 
 
 // 获取车型信息(NEW)
-server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext, vin: string) => {
+server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext,
+  vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`);
   try {
     await verify([
@@ -64,7 +65,9 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
         // 可以封装成函数复用
         const options: Option = {
           log: log,
-          sn: ctx.sn
+          sn: ctx.sn,
+          disque: server.queue,
+          queue: "vehicle-package"
         };
         try {
           const cmbvr = await getCarModelByVin(vin, options);
@@ -90,19 +93,19 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
             return {
               code: 408,
-              msg: "访问智通接口超时"
+              msg: "网络连接超时（VJY408），请稍后重试"
             };
           } else if (err.code) {
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
             return {
               code: err.code,
-              msg: err.message
+              msg: "未查询到车型信息，请确认VIN码输入正确"
             };
           } else {
             log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
             return {
               code: 500,
-              msg: "获取车型信息失败"
+              msg: "服务器开小差了（VJY500），请稍后重试"
             };
           };
         }
@@ -111,7 +114,9 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
       // 可以封装成函数复用
       const options: Option = {
         log: log,
-        sn: ctx.sn
+        sn: ctx.sn,
+        disque: server.queue,
+        queue: "vehicle-package"
       };
       try {
         const cmbvr = await getCarModelByVin(vin, options);
@@ -124,7 +129,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 该车型没找到,请检查VIN码输入是否正确`);
           return {
             code: 404,
-            msg: "该车型没找到,请检查VIN码输入是否正确"
+            msg: "未查询到车型信息，请确认VIN码输入正确"
           };
         }
       } catch (err) {
@@ -137,19 +142,19 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
           return {
             code: 408,
-            msg: "访问智通接口超时"
+            msg: "网络连接超时（VJY408），请稍后重试"
           };
         } else if (err.code) {
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
           return {
             code: err.code,
-            msg: err.message
+            msg: "未查询到车型信息，请确认VIN码输入正确"
           };
         } else {
           log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
           return {
             code: 500,
-            msg: "获取车型信息失败"
+            msg: "服务器开小差了（VJY500），请稍后重试"
           };
         };
       }
@@ -162,12 +167,13 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
     log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
     return {
       code: 500,
-      msg: "获取车型信息失败"
+      msg: "服务器开小差了（VJY500），请稍后重试"
     };
   }
 });
 
-server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehicle code", async (ctx: ServerContext, code: string) => {
+server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehicle code", async (ctx: ServerContext,
+  code: string) => {
   log.info(`getVehicleModel, sn: ${ctx.sn}, uid: ${ctx.uid}, code: ${code}`);
   try {
     await verify([
@@ -192,7 +198,7 @@ server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehi
       log.error(`getVehicleModel, sn: ${ctx.sn}, uid: ${ctx.uid}, code: ${code}, msg: 车型信息未找到`);
       return {
         code: 404,
-        msg: "车型信息未找到"
+        msg: "未查询到车型信息，请确认车型码输入正确"
       };
     }
   } catch (err) {
@@ -200,12 +206,13 @@ server.callAsync("getVehicleModel", allowAll, "获取车型信息", "根据 vehi
     log.error(`getVehicleModel, sn: ${ctx.sn}, uid: ${ctx.uid}, code: ${code}`, err);
     return {
       code: 500,
-      msg: "获取车型失败"
+      msg: "服务器开小差了（VVM500），请稍后重试"
     };
   }
 });
 
-server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", async (ctx: ServerContext, vid: string) => {
+server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找车", async (ctx: ServerContext,
+  vid: string) => {
   log.info(`getVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   try {
     await verify([
@@ -230,7 +237,7 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
       log.error(`getVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, msg: 车辆信息未找到`);
       return {
         code: 404,
-        msg: "车辆信息未找到"
+        msg: "未查询到车辆信息，请确认vid输入正确"
       };
     }
   } catch (err) {
@@ -238,12 +245,22 @@ server.callAsync("getVehicle", allowAll, "获取某辆车信息", "根据vid找�
     log.error(`getVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`, err);
     return {
       code: 500,
-      msg: "获取某辆车信息失败"
+      msg: "服务器开小差了（VGV500），请稍后重试"
     };
   }
 });
 
-server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
+server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加车信息上牌车", async (ctx: ServerContext,
+  vehicle_code: string,
+  license_no: string,
+  engine_no: string,
+  register_date: Date,
+  is_transfer: boolean,
+  last_insurance_company: string,
+  insurance_due_date: Date,
+  fuel_type: string,
+  vin: string,
+  accident_status: number) => {
   log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   try {
     await verify([
@@ -274,7 +291,14 @@ server.callAsync("createVehicle", allowAll, "添加车信息上牌车", "添加�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, is_transfer: boolean, fuel_type: string, vin: string) => {
+server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信息(新车未上牌)", async (ctx: ServerContext,
+  vehicle_code: string,
+  engine_no: string,
+  receipt_no: string,
+  receipt_date: Date,
+  is_transfer: boolean,
+  fuel_type: string,
+  vin: string) => {
   log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, is_transfer: ${is_transfer}, fuel_type: ${fuel_type}, vin: ${vin}`);
   try {
     await verify([
@@ -300,45 +324,6 @@ server.callAsync("createNewVehicle", allowAll, "添加车信息", "添加车信�
   return await waitingAsync(ctx);
 });
 
-server.callAsync("updateDrivingView", allowAll, "更新行驶证信息", "更新行驶证信息", async (ctx: ServerContext, vid: string, driving_frontal_view: string, driving_rear_view: string) => {
-  log.info(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
-  try {
-    await verify([
-      uuidVerifier("vid", vid),
-      stringVerifier("driving_frontal_view", driving_frontal_view),
-      stringVerifier("driving_rear_view", driving_rear_view),
-    ]);
-  } catch (err) {
-    ctx.report(3, err);
-    return {
-      code: 400,
-      msg: err.message
-    };
-  }
-  try {
-    const vehicle_buff: Buffer = await ctx.cache.hgetAsync("vehicle-entities", vid);
-    if (vehicle_buff) {
-      const args = [vid, driving_frontal_view, driving_rear_view];
-      const pkt: CmdPacket = { cmd: "updateDrivingView", args: args };
-      ctx.publish(pkt);
-      return await waitingAsync(ctx);
-    } else {
-      log.error(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
-      return {
-        code: 404,
-        msg: "车辆未找到"
-      };
-    }
-  } catch (err) {
-    ctx.report(3, err);
-    log.error(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`, err);
-    return {
-      code: 500,
-      msg: "更新行驶证信息"
-    };
-  }
-});
-
 async function ids2objects(cache: RedisClient,
   key: string,
   ids: string[]) {
@@ -351,7 +336,8 @@ async function ids2objects(cache: RedisClient,
 }
 
 
-server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext, vid?: string) => {
+server.callAsync("refresh", adminOnly, "refresh", "refresh", async (ctx: ServerContext,
+  vid?: string) => {
   log.info(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   const pkt: CmdPacket = { cmd: "refresh", args: vid ? [vid] : [] };
   ctx.publish(pkt);
@@ -397,7 +383,9 @@ const provinces: Object = {
   "黑龙江": "230000"
 };
 
-server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext, provinceName: string, cityName: string) => {
+server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标码和市名称获取市国标码", async (ctx: ServerContext,
+  provinceName: string,
+  cityName: string) => {
   log.info(`getCityCode, sn: ${ctx.sn}, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}`);
   try {
     await verify([
@@ -416,13 +404,15 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
     log.error(`getCityCode, sn: ${ctx.sn}, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}, msg: 省国标码未找到`);
     return {
       code: 404,
-      msg: "省国标码未找到"
+      msg: "未查询到省国标码，请确认省份名输入正确"
     };
   }
   try {
     const options: Option = {
       log: log,
-      sn: ctx.sn
+      sn: ctx.sn,
+      disque: server.queue,
+      queue: "vehicle-package"
     };
     const ctr = await getCity(provinceCode, options);
     const cityList = ctr["data"];
@@ -437,7 +427,7 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
     log.error(`getCityCode, sn: ${ctx.sn}, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}, msg: 市国标码未找到`);
     return {
       code: 404,
-      msg: "市国标码未找到"
+      msg: "未查询到市国标码，请确认城市名输入正确"
     };
   } catch (err) {
     const error = new Error(err.message);
@@ -445,12 +435,13 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
     log.error(`getCityCode, sn: ${ctx.sn}, uid: ${ctx.uid}, provinceName: ${provinceName}, cityName: ${cityName}`, err);
     return {
       code: 500,
-      msg: err.message
+      msg: "未查询到市国标码，请确认省市名称输入正确"
     };
   }
 });
 
-server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext, license: string) => {
+server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查询车和车型信息", "根据车牌号从智通引擎查询车和车型信息", async (ctx: ServerContext,
+  license: string) => {
   log.info(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}`);
   try {
     await verify([
@@ -469,7 +460,9 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     if (vin_buff) {
       const options: Option = {
         log: log,
-        sn: ctx.sn
+        sn: ctx.sn,
+        disque: server.queue,
+        queue: "vehicle-package"
       };
       const vin: string = vin_buff.toString();
       const response_no_buff: Buffer = await ctx.cache.getAsync(`zt-response-code:${license}`);
@@ -520,12 +513,24 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
               response_no: vblr["data"]["responseNo"],
               vehicle: {
                 engine_no: vblr["data"]["engineNo"],
-                register_date: vblr["data"]["registerDate"],
+                register_date: new Date(vblr["data"]["registerDate"]),
                 license_no: vblr["data"]["licenseNo"],
                 vin: vblr["data"]["frameNo"]
               },
               models: models
             };
+
+            // 缓存智通的响应码
+            const response_no_buff: Buffer = await msgpack_encode_async({
+              response_no: vblr["data"]["responseNo"],
+              vehicle: {
+                engine_no: vblr["data"]["engineNo"],
+                register_date: new Date(vblr["data"]["registerDate"]),
+                license_no: vblr["data"]["licenseNo"],
+                vin: vblr["data"]["frameNo"]
+              },
+            });
+            await ctx.cache.setexAsync(`zt-response-code:${license}`, 60 * 60 * 24 * 3, response_no_buff); // 智通响应码(三天有效)
             return { code: 200, data: vehicleInfo };
           }
         }
@@ -534,7 +539,9 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     // 其他 
     const options: Option = {
       log: log,
-      sn: ctx.sn
+      sn: ctx.sn,
+      disque: server.queue,
+      queue: "vehicle-package"
     };
     const vblr = await getVehicleByLicense(license, options);
     const cmr = await getCarModel(vblr["data"]["frameNo"], license, vblr["data"]["responseNo"], options);
@@ -542,7 +549,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
       response_no: vblr["data"]["responseNo"],
       vehicle: {
         engine_no: vblr["data"]["engineNo"],
-        register_date: vblr["data"]["registerDate"],
+        register_date: new Date(vblr["data"]["registerDate"]),
         license_no: vblr["data"]["licenseNo"],
         vin: vblr["data"]["frameNo"]
       },
@@ -561,27 +568,28 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     if (err.code === 408) {
       log.error(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}, msg: 访问智通接口超时`);
       return {
-        code: 504,
-        msg: "访问智通接口超时"
+        code: 408,
+        msg: "网络连接超时（VZM408），请稍后重试"
       };
     } else if (err.code) {
       log.error(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}`, err);
       return {
         code: err.code,
-        msg: err.message
+        msg: "未查询到车型信息，请确认车牌号输入正确"
       };
     } else {
       log.error(`fetchVehicleAndModelsByLicense, sn: ${ctx.sn}, uid: ${ctx.uid}, license: ${license}`, err);
       return {
         code: 500,
-        msg: "获取车型失败"
+        msg: "服务器开小差了（VZM500），请稍后重试"
       };
     }
   }
 });
 
-// TODO
-server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext, vid: string, insurance_due_date: Date) => {
+server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "设置保险到期时间", async (ctx: ServerContext,
+  vid: string,
+  insurance_due_date: Date) => {
   log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   try {
     await verify([
@@ -605,7 +613,7 @@ server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "�
     log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, pid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
     return {
       code: 500,
-      msg: "设置保险到期时间失败"
+      msg: "服务器开小差了（VSD500），请稍后重试"
     };
   }
 });

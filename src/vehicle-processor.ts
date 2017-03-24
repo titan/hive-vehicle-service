@@ -27,8 +27,10 @@ let log = bunyan.createLogger({
 
 export const processor = new Processor();
 
-// 获取车型信息(NEW)
-processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, args: any, vin: string) => {
+// 获取车型信息
+processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
+  args: any,
+  vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -64,99 +66,92 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, arg
 });
 
 // 新车已上牌个人
-processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
+processor.callAsync("createVehicle", async (ctx: ProcessorContext,
+  vehicle_code: string,
+  license_no: string,
+  engine_no: string,
+  register_date: Date,
+  is_transfer: boolean,
+  last_insurance_company: string,
+  insurance_due_date: Date,
+  fuel_type: string,
+  vin: string,
+  accident_status: number) => {
   log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
-    const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
+    const l2vresult = await db.query("SELECT id, engine_no, vin, register_date FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
+    log.info(`createVehicle, l2vresult: ${l2vresult.rowCount}`);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
         if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
-          await sync_vehicle(ctx, db, cache, vhc["id"]);
+          if (!vhc["register_date"]) {
+            await db.query("UPDATE vehicles SET register_date = $1 WHERE id = $2", [register_date, vhc["id"]]);
+            await sync_vehicle(ctx, db, cache, vhc["id"]);
+          }
           return {
             code: 200,
             data: vhc["id"]
           };
         }
       }
-    } else {
-      const vid = uuid.v1();
-      await db.query("INSERT INTO vehicles (id, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11)", [vid, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status]);
-      await db.query("COMMIT");
-      await sync_vehicle(ctx, db, cache, vid);
-      return { code: 200, data: vid };
     }
-
+    const vid = uuid.v1();
+    await db.query("INSERT INTO vehicles (id, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11)", [vid, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status]);
+    await db.query("COMMIT");
+    await sync_vehicle(ctx, db, cache, vid);
+    return { code: 200, data: vid };
   } catch (err) {
     await db.query("ROLLBACK");
     log.error(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`, err);
-    return { code: 500, msg: "创建车辆信息失败" };
+    return { code: 500, msg: "创建车辆信息失败(VCV500)" };
   }
 });
 
 // 新车未上牌个人
-processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, is_transfer: boolean, fuel_type: string, vin: string) => {
+processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
+  vehicle_code: string,
+  engine_no: string,
+  receipt_no: string,
+  receipt_date: Date,
+  is_transfer: boolean,
+  fuel_type: string,
+  vin: string) => {
   log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
     const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
+    log.info(`createNewVehicle, l2vresult: ${l2vresult.rowCount}`);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
         if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
-          await sync_vehicle(ctx, db, cache, vhc["id"]);
           return {
             code: 200,
             data: vhc["id"]
           };
         }
       }
-    } else {
-      const vid = uuid.v1();
-      await db.query("INSERT INTO vehicles (id, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [vid, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin]);
-      await db.query("COMMIT");
-      await sync_vehicle(ctx, db, cache, vid);
-      return { code: 200, data: vid };
     }
-  } catch (err) {
-    ctx.report(3, err);
-    await db.query("ROLLBACK");
-    log.error(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
-    return { code: 500, msg: "创建车辆信息失败" };
-  }
-});
-
-// NEW
-processor.callAsync("updateDrivingView", async (ctx: ProcessorContext, vid: string, driving_frontal_view: string, driving_rear_view: string) => {
-  log.info(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`);
-  const db: PGClient = ctx.db;
-  const cache: RedisClient = ctx.cache;
-  try {
-    await db.query("BEGIN");
-    await db.query("UPDATE vehicles SET driving_frontal_view = $1, driving_rear_view = $2, updated_at = $3 WHERE id = $4", [driving_frontal_view, driving_rear_view, new Date(), vid]);
+    const vid = uuid.v1();
+    await db.query("INSERT INTO vehicles (id, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [vid, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin]);
     await db.query("COMMIT");
-    const vehicle_buff: Buffer = await cache.hgetAsync("vehicle-entities", vid);
-    const vehicle = await msgpack_decode_async(vehicle_buff);
-    vehicle["driving_frontal_view"] = driving_frontal_view;
-    vehicle["driving_rear_view"] = driving_rear_view;
-    const pkt = await msgpack_encode_async(vehicle);
-    await cache.hsetAsync("vehicle-entities", vid, pkt);
+    await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (err) {
     ctx.report(3, err);
     await db.query("ROLLBACK");
-    log.error(`updateDrivingView, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, driving_frontal_view: ${driving_frontal_view}, driving_rear_view: ${driving_rear_view}`, err);
-    return { code: 500, msg: "更新证件照信息失败" };
+    log.error(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
+    return { code: 500, msg: "创建车辆信息失败(VNV500)" };
   }
 });
 
 function row2model(row: Object) {
-  // log.info(`row["source"]: ${row["source"]}`);
   const src: number = row["source"];
   let model = null;
   switch (src) {
@@ -246,8 +241,6 @@ function row2vehicle(row: Object) {
     receipt_date: row["receipt_date"],
     last_insurance_company: trim(row["last_insurance_company"]),
     insurance_due_date: row["insurance_due_date"],
-    driving_frontal_view: trim(row["driving_frontal_view"]),
-    driving_rear_view: trim(row["driving_rear_view"]),
     accident_status: row["accident_status"]
   };
 }
@@ -260,7 +253,8 @@ function trim(str: string) {
   }
 }
 
-processor.callAsync("refresh", async (ctx: ProcessorContext, vid?: string) => {
+processor.callAsync("refresh", async (ctx: ProcessorContext,
+  vid?: string) => {
   log.info(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -288,7 +282,8 @@ processor.callAsync("refresh", async (ctx: ProcessorContext, vid?: string) => {
 
 });
 
-processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_and_models_zt: Object) => {
+processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
+  vehicle_and_models_zt: Object) => {
   log.info(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -342,11 +337,16 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_an
     await db.query("ROLLBACK");
     ctx.report(3, err);
     log.error(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
-    return { code: 500, msg: "创建车型信息出错" };
+    return { code: 500, msg: "创建车型信息失败(VZMP500)" };
   }
 });
 
-processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: string, insurance_due_date: string) => {
+
+
+// TODO
+processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
+  vid: string,
+  insurance_due_date: string) => {
   log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -355,12 +355,13 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: st
     const is_vid_exist_result = await db.query("SELECT id FROM vehicles WHERE id = $1", [vid]);
     if (is_vid_exist_result.rowCount > 0) {
       await db.query("UPDATE vehicles SET insurance_due_date = $1, updated_at = $2 WHERE id = $3", [insurance_due_date, new Date(), vid]);
+      await db.query("COMMIT");
       await sync_vehicle(ctx, db, cache, vid);
     } else {
       log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}, msg: 车辆信息未找到`);
       return {
         code: 404,
-        msg: "车辆信息未找到"
+        msg: `未查询到车辆信息(VSDP404)，请确认vid输入正确, vid: ${vid}`
       };
     }
     return { code: 200, data: vid };
@@ -368,14 +369,17 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: st
     await db.query("ROLLBACK");
     ctx.report(3, err);
     log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
-    return { code: 500, msg: "设置保险到期时间出错" };
+    return { code: 500, msg: "设置保险到期时间失败(VSDP500)" };
   }
 });
 
 
-async function sync_vehicle(ctx: ProcessorContext, db: PGClient, cache: RedisClient, vid?: string): Promise<any> {
+async function sync_vehicle(ctx: ProcessorContext,
+  db: PGClient,
+  cache: RedisClient,
+  vid?: string): Promise<any> {
   try {
-    const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.driving_frontal_view, v.driving_rear_view, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false AND p.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
+    const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     if (result.rowCount > 0) {
       for (const row of result.rows) {
