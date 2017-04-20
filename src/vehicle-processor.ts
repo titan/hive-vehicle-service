@@ -1,6 +1,7 @@
 import { Processor, ProcessorFunction, ProcessorContext, rpcAsync, set_for_response, msgpack_decode_async, msgpack_encode_async } from "hive-service";
 import { Client as PGClient, QueryResult } from "pg";
 import { RedisClient, Multi } from "redis";
+import { Vehicle, VehicleModel } from "vehicle-library";
 import * as uuid from "uuid";
 import * as bluebird from "bluebird";
 import * as bunyan from "bunyan";
@@ -28,9 +29,7 @@ let log = bunyan.createLogger({
 export const processor = new Processor();
 
 // 获取车型信息
-processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
-  args: any,
-  vin: string) => {
+processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, args: any, vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -49,8 +48,8 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
     const models = transVehicleModelByVin(models_jy);
     for (const model of models) {
       const pkt = await msgpack_encode_async(model);
-      multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
-      codes.push(model["vehicle_code"]);
+      multi.hset("vehicle-model-entities", model.code, pkt);
+      codes.push(model.code);
     }
     const codes_buff = await msgpack_encode_async(codes);
     multi.hset("vehicle-vin-codes", vin, codes_buff);
@@ -61,29 +60,18 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext,
     ctx.report(3, err);
     await db.query("ROLLBACK");
     log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
-    return { code: 500, msg: "创建车型信息失败" };
+    return { code: 500, msg: `创建车型信息失败(${err.message})` };
   }
 });
 
 // 新车已上牌个人
-processor.callAsync("createVehicle", async (ctx: ProcessorContext,
-  vehicle_code: string,
-  license_no: string,
-  engine_no: string,
-  register_date: Date,
-  is_transfer: boolean,
-  last_insurance_company: string,
-  insurance_due_date: Date,
-  fuel_type: string,
-  vin: string,
-  accident_status: number) => {
+processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code: string, license_no: string, engine_no: string, register_date: Date, is_transfer: boolean, last_insurance_company: string, insurance_due_date: Date, fuel_type: string, vin: string, accident_status: number) => {
   log.info(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
     const l2vresult = await db.query("SELECT id, engine_no, vin, register_date FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-    log.info(`createVehicle, l2vresult: ${l2vresult.rowCount}`);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
@@ -94,7 +82,7 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext,
           }
           return {
             code: 200,
-            data: vhc["id"]
+            data: vhc["id"],
           };
         }
       }
@@ -107,33 +95,25 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext,
   } catch (err) {
     await db.query("ROLLBACK");
     log.error(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`, err);
-    return { code: 500, msg: "创建车辆信息失败(VCV500)" };
+    return { code: 500, msg: `创建车辆信息失败(VCV500: ${err.message})` };
   }
 });
 
 // 新车未上牌个人
-processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
-  vehicle_code: string,
-  engine_no: string,
-  receipt_no: string,
-  receipt_date: Date,
-  is_transfer: boolean,
-  fuel_type: string,
-  vin: string) => {
+processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_code: string, engine_no: string, receipt_no: string, receipt_date: Date, is_transfer: boolean, fuel_type: string, vin: string) => {
   log.info(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
     await db.query("BEGIN");
     const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
-    log.info(`createNewVehicle, l2vresult: ${l2vresult.rowCount}`);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
         if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
           return {
             code: 200,
-            data: vhc["id"]
+            data: vhc["id"],
           };
         }
       }
@@ -151,14 +131,14 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext,
   }
 });
 
-function row2model(row: Object) {
+function row2model(row: QueryResult): VehicleModel {
   const src: number = row["source"];
-  let model = null;
+  let model: VehicleModel = null;
   switch (src) {
-    case 0:
-      {
+    case 0: {
         model = {
           source: 0,
+          code: trim(row["vehicle_code"]),
           vehicle_code: trim(row["vehicle_code"]),
           vehicle_name: trim(row["vmodel"]["vehicle_name"]),
           brand_name: trim(row["vmodel"]["brand_name"]),
@@ -175,14 +155,14 @@ function row2model(row: Object) {
           effluent_standard: trim(row["vmodel"]["effluent_standard"]),
           pl: trim(row["vmodel"]["pl"]),
           // fuelJet_type: trim(row["vmodel"]["fuel_jet_type"]),
-          driven_type: trim(row["vmodel"]["driven_type"])
+          driven_type: trim(row["vmodel"]["driven_type"]),
         };
       }
       break;
-    case 1:
-      {
+    case 1: {
         model = {
           source: 1,
+          code: trim(row["vehicle_code"]),
           vehicle_code: trim(row["vehicle_code"]),
           vehicle_name: trim(row["vmodel"]["vehicleName"]),
           brand_name: trim(row["vmodel"]["brandName"]),
@@ -199,14 +179,14 @@ function row2model(row: Object) {
           effluent_standard: trim(row["vmodel"]["effluentStandard"]),
           pl: trim(row["vmodel"]["pl"]),
           // fuelJet_type: trim(row["vmodel"]["fuelJetType"]),
-          driven_type: trim(row["vmodel"]["drivenType"])
+          driven_type: trim(row["vmodel"]["drivenType"]),
         };
       }
       break;
-    case 2:
-      {
+    case 2: {
         model = {
           source: 2,
+          code: trim(row["vehicle_code"]),
           vehicle_code: trim(row["vehicle_code"]),
           vehicle_name: trim(row["vmodel"]["standardName"]),
           brand_name: trim(row["vmodel"]["brandName"]),
@@ -217,19 +197,18 @@ function row2model(row: Object) {
           cfg_level: trim(row["vmodel"]["remark"]),
           purchase_price: row["vmodel"]["purchasePrice"],
           purchase_price_tax: row["vmodel"]["purchasePriceTax"],
-          seat: row["vmodel"]["seatCount"]
+          seat: row["vmodel"]["seatCount"],
         };
       }
       break;
-    default:
-      {
+    default: {
         return null;
       }
   }
   return model;
 }
 
-function row2vehicle(row: Object) {
+function row2vehicle(row: QueryResult): Vehicle {
   return {
     id: trim(row["id"]),
     vin: trim(row["vin"]),
@@ -263,10 +242,8 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
       // 全刷时除旧
       await cache.delAsync("vehicle-entities");
       await cache.delAsync("vehicle-model-entities");
-
       // TODEL
       // await cache.delAsync("vehicle-vin-codes");
-      await cache.delAsync("vehicle-model");
       await cache.delAsync("vehicle-license-vin");
     }
     await sync_vehicle(ctx, db, cache, vid);
@@ -276,14 +253,13 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
     log.error(`refresh, sn: ${ctx.sn}, uid: ${ctx.uid}, msg: error on remove old data`, err);
     return {
       code: 500,
-      msg: "Error on refresh"
+      msg: "Error on refresh",
     };
   }
 
 });
 
-processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
-  vehicle_and_models_zt: Object) => {
+processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_and_models_zt: Object) => {
   log.info(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -304,9 +280,9 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
         engine_no: vehicle_and_models_zt["vehicle"]["engine_no"],
         register_date: vehicle_and_models_zt["vehicle"]["register_date"],
         license_no: vehicle_and_models_zt["vehicle"]["license_no"],
-        vin: vehicle_and_models_zt["vehicle"]["vin"]
+        vin: vehicle_and_models_zt["vehicle"]["vin"],
       },
-      models: transVehicleModelByLicense(vehicle_and_models_zt["models"])
+      models: transVehicleModelByLicense(vehicle_and_models_zt["models"]),
     };
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     const codes = [];
@@ -324,7 +300,7 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
         engine_no: vehicle_and_models_zt["vehicle"]["engine_no"],
         register_date: vehicle_and_models_zt["vehicle"]["register_date"],
         license_no: vehicle_and_models_zt["vehicle"]["license_no"],
-        vin: vehicle_and_models_zt["vehicle"]["vin"]
+        vin: vehicle_and_models_zt["vehicle"]["vin"],
       },
     });
     const codes_buff: Buffer = await msgpack_encode_async(codes);
@@ -337,16 +313,12 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext,
     await db.query("ROLLBACK");
     ctx.report(3, err);
     log.error(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
-    return { code: 500, msg: "创建车型信息失败(VZMP500)" };
+    return { code: 500, msg: `创建车型信息失败(VZMP500 ${err.message})` };
   }
 });
 
-
-
 // TODO
-processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
-  vid: string,
-  insurance_due_date: string) => {
+processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: string, insurance_due_date: string) => {
   log.info(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
@@ -361,7 +333,7 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
       log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}, msg: 车辆信息未找到`);
       return {
         code: 404,
-        msg: `未查询到车辆信息(VSDP404)，请确认vid输入正确, vid: ${vid}`
+        msg: `未查询到车辆信息(VSDP404)，请确认vid输入正确, vid: ${vid}`,
       };
     }
     return { code: 200, data: vid };
@@ -369,29 +341,26 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext,
     await db.query("ROLLBACK");
     ctx.report(3, err);
     log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
-    return { code: 500, msg: "设置保险到期时间失败(VSDP500)" };
+    return { code: 500, msg: `设置保险到期时间失败(VSDP500 ${err.message})` };
   }
 });
 
 
-async function sync_vehicle(ctx: ProcessorContext,
-  db: PGClient,
-  cache: RedisClient,
-  vid?: string): Promise<any> {
+async function sync_vehicle(ctx: ProcessorContext, db: PGClient, cache: RedisClient, vid?: string): Promise<any> {
   try {
     const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     if (result.rowCount > 0) {
       for (const row of result.rows) {
         const vehicle = row2vehicle(row);
-        vehicle["model"] = row2model(row);
-        if (row["license_no"] && row["vin"]) {
-          await cache.hsetAsync("vehicle-license-vin", row["license_no"], row["vin"]);
+        vehicle.model = row2model(row);
+        if (row.license_no && row.vin) {
+          await cache.hsetAsync("vehicle-license-vin", row.license_no, row.vin);
         }
-        const vmpkt = await msgpack_encode_async(vehicle["model"]);
-        multi.hset("vehicle-model-entities", vehicle["model"]["vehicle_code"], vmpkt);
+        const vmpkt = await msgpack_encode_async(vehicle.model);
+        multi.hset("vehicle-model-entities", vehicle.model.code, vmpkt);
         const vpkt = await msgpack_encode_async(vehicle);
-        multi.hset("vehicle-entities", vehicle["id"], vpkt);
+        multi.hset("vehicle-entities", vehicle.id, vpkt);
       }
       await multi.execAsync();
     }
