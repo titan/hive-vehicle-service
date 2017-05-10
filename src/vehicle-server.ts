@@ -6,7 +6,7 @@ import * as bunyan from "bunyan";
 import * as uuid from "uuid";
 import { verify, uuidVerifier, stringVerifier, arrayVerifier, objectVerifier, booleanVerifier, numberVerifier, dateVerifier } from "hive-verify";
 import { getCarModelByVin, Option } from "jy-library";
-import { getCity, getVehicleByLicense, getCarModel } from "ztyq-library";
+import { getCity, getVehicleByLicense, getVehicleByFrameNo, getCarModel } from "ztyq-library";
 import { Vehicle, VehicleModel } from "vehicle-library";
 import * as bluebird from "bluebird";
 
@@ -73,7 +73,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
       const cmbvr = await getCarModelByVin(vin, options);
       const args = cmbvr["data"];
       if (args && args.length > 0) {
-        const pkt: CmdPacket = { cmd: "saveVehicleModels", args: [args, vin] };
+        const pkt: CmdPacket = { cmd: "saveJYVehicleModels", args: [args, vin] };
         ctx.publish(pkt);
         return await waitingAsync(ctx);
       } else {
@@ -367,12 +367,6 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     // redis 缓存了该车牌的数据则从数据库读取
     const vin_buff: Buffer = await ctx.cache.hgetAsync("vehicle-license-vin", license);
     if (vin_buff) {
-      const options: Option = {
-        log: log,
-        sn: ctx.sn,
-        disque: server.queue,
-        queue: "vehicle-package",
-      };
       const vin: string = vin_buff.toString();
       const response_no_buff: Buffer = await ctx.cache.getAsync(`zt-response-code:${license}`);
       if (response_no_buff) {
@@ -405,6 +399,12 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
         }
       } else {
         // 响应码过期，重新获取响应码
+        const options: Option = {
+          log: log,
+          sn: ctx.sn,
+          disque: server.queue,
+          queue: "vehicle-package",
+        };
         const vblr = await getVehicleByLicense(license, options);
         const mdls_buff: Buffer = await ctx.cache.hgetAsync("vehicle-vin-codes", vin);
         const models = [];
@@ -464,8 +464,11 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
       models: cmr["data"],
     };
     const args = [vehicleInfo];
-    const pkt: CmdPacket = { cmd: "addVehicleModels", args: args };
+    const pkt: CmdPacket = { cmd: "saveZTVehicleModels", args: args };
     ctx.publish(pkt);
+    delete vehicleInfo["models"];
+    const response_no_buf = await msgpack_encode_async(vehicleInfo);
+    await ctx.cache.setexAsync(`zt-response-code:${license}`, 60 * 60 * 24 * 3, response_no_buf); // 智通响应码(三天有效)
     return await waitingAsync(ctx);
   } catch (err) {
     const data = {

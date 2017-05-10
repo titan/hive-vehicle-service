@@ -29,8 +29,8 @@ let log = bunyan.createLogger({
 export const processor = new Processor();
 
 // 获取车型信息
-processor.callAsync("saveVehicleModels", async (ctx: ProcessorContext, args: any, vin: string) => {
-  log.info(`saveVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
+processor.callAsync("saveJYVehicleModels", async (ctx: ProcessorContext, args: any, vin: string) => {
+  log.info(`saveJYVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
@@ -77,8 +77,8 @@ processor.callAsync("saveVehicleModels", async (ctx: ProcessorContext, args: any
     return { code: 200, data: models };
   } catch (err) {
     ctx.report(3, err);
-    log.error(`saveVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
-    return { code: 500, msg: `创建车型信息失败(${err.message})` };
+    log.error(`saveJYVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
+    return { code: 500, msg: `保存精友车型信息失败(${err.message})` };
   }
 });
 
@@ -279,21 +279,43 @@ processor.callAsync("refresh", async (ctx: ProcessorContext,
 
 });
 
-processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_and_models_zt: Object) => {
-  log.info(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
+processor.callAsync("saveZTVehicleModels", async (ctx: ProcessorContext, vehicle_and_models_zt: Object) => {
+  log.info(`saveZTVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid} vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    await db.query("BEGIN");
-    const vehicle_models_zt = vehicle_and_models_zt["models"];
-    for (const model of vehicle_models_zt) {
-      const code = trim(model["modelCode"]).replace(/-/g, "");
-      const dbmodel = await db.query("SELECT 1 FROM vehicle_models WHERE code = $1 AND deleted = false", [code]);
-      if (dbmodel["rowCount"] === 0) {
-        await db.query("INSERT INTO vehicle_models(code, source, data) VALUES($1, 2, $2)", [code, model]);
+    const models_zt = vehicle_and_models_zt["models"].map(x => {
+      const code = trim(x["modelCode"].replace(/-/g, ""));
+      x["vehicleCode"] = code;
+      return x;
+    });
+    const newcodes = models_zt.map(x => x["vehicleCode"]);
+    const oldresult = await db.query("SELECT code FROM vehicle_models WHERE code in $1", [newcodes]);
+    const codeset: Set<string> = new Set<string>();
+    if (oldresult.rowCount > 0) {
+      const oldset = new Set(oldresult.rows.map(x => x.code));
+      for (const code of newcodes) {
+        if (!oldset.has(code)) {
+          codeset.add(code);
+        }
+      }
+    } else {
+      for (const code of newcodes) {
+        codeset.add(code);
       }
     }
-    await db.query("COMMIT");
+    const values: string[] = [];
+    const params: any[] = [];
+    const models_to_save = models_zt.filter(x => codeset.has(x["vehicleCode"]));
+    for (let i = 0, len = models_to_save.length; i < len; i ++) {
+      const model = models_to_save[i];
+      values.push("($" + (i * 2 + 1) + ", 2, " + (i * 2 + 2) + ")");
+      params.push(model["vehicleCode"]);
+      params.push(model);
+    }
+    if (values.length > 0) {
+      await db.query("INSERT INTO vehicle_models(code, source, data) VALUES" + values.join(","), params);
+    }
     const vehicle_and_models = {
       response_no: vehicle_and_models_zt["response_no"],
       vehicle: {
@@ -312,28 +334,17 @@ processor.callAsync("addVehicleModels", async (ctx: ProcessorContext, vehicle_an
       multi.hset("vehicle-model-entities", model["vehicle_code"], pkt);
       codes.push(model["vehicle_code"]);
     }
-    const license = vehicle_and_models["vehicle"]["license_no"];
-    const vin = vehicle_and_models["vehicle"]["vin"];
-    const response_no_buff: Buffer = await msgpack_encode_async({
-      response_no: vehicle_and_models_zt["response_no"],
-      vehicle: {
-        engine_no: vehicle_and_models_zt["vehicle"]["engine_no"],
-        register_date: vehicle_and_models_zt["vehicle"]["register_date"],
-        license_no: vehicle_and_models_zt["vehicle"]["license_no"],
-        vin: vehicle_and_models_zt["vehicle"]["vin"],
-      },
-    });
+    const license = vehicle_and_models_zt["vehicle"]["license_no"];
+    const vin = vehicle_and_models_zt["vehicle"]["vin"];
     const codes_buff: Buffer = await msgpack_encode_async(codes);
     multi.hset("vehicle-vin-codes", vin, codes_buff);
     multi.hset("vehicle-license-vin", license, vin);
-    multi.setex(`zt-response-code:${license}`, 60 * 60 * 24 * 3, response_no_buff); // 智通响应码(三天有效)
     await multi.execAsync();
     return { code: 200, data: vehicle_and_models };
   } catch (err) {
-    await db.query("ROLLBACK");
     ctx.report(3, err);
-    log.error(`addVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
-    return { code: 500, msg: `创建车型信息失败(VZMP500 ${err.message})` };
+    log.error(`saveZTVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_and_models_zt: ${JSON.stringify(vehicle_and_models_zt)}`, err);
+    return { code: 500, msg: `保存智通车型信息失败(VZMP500 ${err.message})` };
   }
 });
 
