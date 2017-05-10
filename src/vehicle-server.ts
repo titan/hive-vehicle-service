@@ -63,7 +63,6 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
         };
       }
     }
-    // 可以封装成函数复用
     const options: Option = {
       log: log,
       sn: ctx.sn,
@@ -74,7 +73,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
       const cmbvr = await getCarModelByVin(vin, options);
       const args = cmbvr["data"];
       if (args && args.length > 0) {
-        const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin] };
+        const pkt: CmdPacket = { cmd: "saveVehicleModels", args: [args, vin] };
         ctx.publish(pkt);
         return await waitingAsync(ctx);
       } else {
@@ -429,7 +428,6 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
               },
               models: models,
             };
-
             // 缓存智通的响应码
             const response_no_buff: Buffer = await msgpack_encode_async({
               response_no: vblr["data"]["responseNo"],

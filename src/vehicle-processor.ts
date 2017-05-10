@@ -29,20 +29,39 @@ let log = bunyan.createLogger({
 export const processor = new Processor();
 
 // 获取车型信息
-processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, args: any, vin: string) => {
-  log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
+processor.callAsync("saveVehicleModels", async (ctx: ProcessorContext, args: any, vin: string) => {
+  log.info(`saveVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`);
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    await db.query("BEGIN");
     const models_jy = args;
-    for (const model of models_jy) {
-      const dbmodel = await db.query("SELECT code FROM vehicle_models WHERE code = $1", [model["vehicleCode"]]);
-      if (dbmodel["rowCount"] === 0) {
-        await db.query("INSERT INTO vehicle_models(code, source, data) VALUES($1, 1, $2)", [model["vehicleCode"], model]);
+    const newcodes = models_jy.map(x => x["vehicleCode"]);
+    const oldresult = await db.query("SELECT code FROM vehicle_models WHERE code in $1", [newcodes]);
+    const codeset: Set<string> = new Set<string>();
+    if (oldresult.rowCount > 0) {
+      const old = new Set(oldresult.rows.map(x => x.code));
+      for (const code of newcodes) {
+        if (!old.has(code)) {
+          codeset.add(code);
+        }
+      }
+    } else {
+      for (const code of newcodes) {
+        codeset.add(code);
       }
     }
-    await db.query("COMMIT");
+    const values: string[] = [];
+    const params: any[] = [];
+    const models_to_save = models_jy.filter(x => codeset.has(x["vehicleCode"]));
+    for (let i = 0, len = models_to_save.length; i < len; i ++) {
+      const model = models_to_save[i];
+      values.push("($" + (i * 2 + 1) + ", 1, " + (i * 2 + 2) + ")");
+      params.push(model["vehicleCode"]);
+      params.push(model);
+    }
+    if (values.length > 0) {
+      await db.query("INSERT INTO vehicle_models(code, source, data) VALUES" + values.join(","), params);
+    }
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     const codes = [];
     const models = transVehicleModelByVin(models_jy);
@@ -58,8 +77,7 @@ processor.callAsync("fetchVehicleModelsByVin", async (ctx: ProcessorContext, arg
     return { code: 200, data: models };
   } catch (err) {
     ctx.report(3, err);
-    await db.query("ROLLBACK");
-    log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
+    log.error(`saveVehicleModels, sn: ${ctx.sn}, uid: ${ctx.uid}, args: ${JSON.stringify(args)}, vin: ${vin}`, err);
     return { code: 500, msg: `创建车型信息失败(${err.message})` };
   }
 });
