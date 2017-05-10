@@ -38,7 +38,7 @@ const log = bunyan.createLogger({
 
 
 // 获取车型信息(NEW)
-server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vid找车型", async (ctx: ServerContext, vin: string) => {
+server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根据vin找车型", async (ctx: ServerContext, vin: string) => {
   log.info(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`);
   try {
     await verify([
@@ -61,108 +61,53 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
           code: 200,
           data: vehicle_model,
         };
-      } else {
-        // 可以封装成函数复用
-        const options: Option = {
-          log: log,
-          sn: ctx.sn,
-          disque: server.queue,
-          queue: "vehicle-package",
-        };
-        try {
-          const cmbvr = await getCarModelByVin(vin, options);
-          const args = cmbvr["data"];
-          if (args && args.length > 0) {
-            const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin] };
-            ctx.publish(pkt);
-            return await waitingAsync(ctx);
-          } else {
-            log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 该车型没找到,请检查VIN码输入是否正确`);
-            return {
-              code: 404,
-              msg: "该车型没找到,请检查VIN码输入是否正确",
-            };
-          }
-        } catch (err) {
-          const error = new Error(err.message);
-          ctx.report(3, error);
-          const data = {
-            vin: vin,
-          };
-          if (err.code === 408) {
-            log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
-            return {
-              code: 408,
-              msg: "网络连接超时（VJY408），请稍后重试",
-            };
-          } else if (err.code) {
-            log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-            return {
-              code: err.code,
-              msg: "未查询到车型信息，请确认VIN码输入正确",
-            };
-          } else {
-            log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-            return {
-              code: 500,
-              msg: "服务器开小差了（VJY500），请稍后重试",
-            };
-          };
-        }
-      }
-    } else {
-      // 可以封装成函数复用
-      const options: Option = {
-        log: log,
-        sn: ctx.sn,
-        disque: server.queue,
-        queue: "vehicle-package",
-      };
-      try {
-        const cmbvr = await getCarModelByVin(vin, options);
-        const args = cmbvr["data"];
-        if (args && args.length > 0) {
-          const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin] };
-          ctx.publish(pkt);
-          return await waitingAsync(ctx);
-        } else {
-          log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 该车型没找到,请检查VIN码输入是否正确`);
-          return {
-            code: 404,
-            msg: "未查询到车型信息，请确认VIN码输入正确",
-          };
-        }
-      } catch (err) {
-        const data = {
-          vin: vin,
-        };
-        const error = new Error(err.message);
-        ctx.report(3, error);
-        if (err.code === 408) {
-          log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
-          return {
-            code: 408,
-            msg: "网络连接超时（VJY408），请稍后重试",
-          };
-        } else if (err.code) {
-          log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-          return {
-            code: err.code,
-            msg: "未查询到车型信息，请确认VIN码输入正确",
-          };
-        } else {
-          log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
-          return {
-            code: 500,
-            msg: "服务器开小差了（VJY500），请稍后重试",
-          };
-        };
       }
     }
-  } catch (err) {
-    const data = {
-      vin: vin,
+    // 可以封装成函数复用
+    const options: Option = {
+      log: log,
+      sn: ctx.sn,
+      disque: server.queue,
+      queue: "vehicle-package",
     };
+    try {
+      const cmbvr = await getCarModelByVin(vin, options);
+      const args = cmbvr["data"];
+      if (args && args.length > 0) {
+        const pkt: CmdPacket = { cmd: "fetchVehicleModelsByVin", args: [args, vin] };
+        ctx.publish(pkt);
+        return await waitingAsync(ctx);
+      } else {
+        log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 该车型没找到,请检查VIN码输入是否正确`);
+        return {
+          code: 404,
+          msg: "未查询到车型信息，请确认VIN码输入正确",
+        };
+      }
+    } catch (err) {
+      const error = new Error(err.message);
+      ctx.report(3, error);
+      if (err.code === 408) {
+        log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}, msg: 访问智通接口超时`);
+        return {
+          code: 408,
+          msg: "网络连接超时（VJY408），请稍后重试",
+        };
+      } else if (err.code) {
+        log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
+        return {
+          code: err.code,
+          msg: "未查询到车型信息，请确认VIN码输入正确",
+        };
+      } else {
+        log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
+        return {
+          code: 500,
+          msg: "服务器开小差了（VJY500），请稍后重试",
+        };
+      };
+    }
+  } catch (err) {
     ctx.report(3, err);
     log.error(`fetchVehicleModelsByVin, sn: ${ctx.sn}, uid: ${ctx.uid}, vin: ${vin}`, err);
     return {
