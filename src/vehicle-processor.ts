@@ -88,7 +88,6 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code:
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    await db.query("BEGIN");
     const l2vresult = await db.query("SELECT id, engine_no, vin, register_date FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
@@ -107,11 +106,9 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code:
     }
     const vid = uuid.v1();
     await db.query("INSERT INTO vehicles (id, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8 ,$9, $10 ,$11)", [vid, vehicle_code, license_no, engine_no, register_date, is_transfer, last_insurance_company, insurance_due_date, fuel_type, vin, accident_status]);
-    await db.query("COMMIT");
     await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (err) {
-    await db.query("ROLLBACK");
     log.error(`createVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, license_no: ${license_no}, engine_no: ${engine_no}, register_date: ${register_date}, is_transfer: ${is_transfer}, last_insurance_company: ${last_insurance_company}, insurance_due_date: ${insurance_due_date}, fuel_type: ${fuel_type}, vin: ${vin}, accident_status: ${accident_status}`, err);
     return { code: 500, msg: `创建车辆信息失败(VCV500: ${err.message})` };
   }
@@ -123,7 +120,6 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_co
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    await db.query("BEGIN");
     const l2vresult = await db.query("SELECT id, engine_no, vin FROM vehicles WHERE vin = $1 AND deleted = false", [vin]);
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
@@ -138,12 +134,10 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_co
     }
     const vid = uuid.v1();
     await db.query("INSERT INTO vehicles (id, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [vid, vehicle_code, engine_no, is_transfer, receipt_no, receipt_date, fuel_type, vin]);
-    await db.query("COMMIT");
     await sync_vehicle(ctx, db, cache, vid);
     return { code: 200, data: vid };
   } catch (err) {
     ctx.report(3, err);
-    await db.query("ROLLBACK");
     log.error(`createNewVehicle, sn: ${ctx.sn}, uid: ${ctx.uid}, vehicle_code: ${vehicle_code}, engine_no: ${engine_no}, is_transfer: ${is_transfer}, receipt_no: ${receipt_no}, receipt_date: ${receipt_date}, fuel_type: ${fuel_type}, vin: ${vin}`, err);
     return { code: 500, msg: "创建车辆信息失败(VNV500)" };
   }
