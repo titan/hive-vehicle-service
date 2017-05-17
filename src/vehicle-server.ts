@@ -446,7 +446,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     }
     // 其他
     const options: Option = {
-      log: log,
+      log,
       sn: ctx.sn,
       disque: server.queue,
       queue: "vehicle-package",
@@ -525,4 +525,15 @@ server.callAsync("setInsuranceDueDate", allowAll, "设置保险到期时间", "�
       msg: "服务器开小差了（VSD500），请稍后重试",
     };
   }
+});
+
+server.callAsync("fetchVehicleByVin", allowAll, "根据车牌号查询车信息", "根据车架号从智通引擎查询车信息", async (ctx: ServerContext, vin: string): Promise<any> => {
+  log.info(`fetchVehicleByVin, uid: ${ctx.uid}, vin: ${vin}`);
+  const options: Option = {
+    log,
+    sn: ctx.sn,
+    disque: server.queue,
+    queue: "vehicle-package",
+  };
+  return await getVehicleByFrameNo(vin, options);
 });

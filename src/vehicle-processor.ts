@@ -35,8 +35,8 @@ processor.callAsync("saveJYVehicleModels", async (ctx: ProcessorContext, args: a
   const cache: RedisClient = ctx.cache;
   try {
     const models_jy = args;
-    const newcodes = models_jy.map(x => x["vehicleCode"]);
-    const oldresult = await db.query("SELECT code FROM vehicle_models WHERE code in $1", [newcodes]);
+    const newcodes = models_jy.map(x => `'${x["vehicleCode"]}'`);
+    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes})`, []);
     const codeset: Set<string> = new Set<string>();
     if (oldresult.rowCount > 0) {
       const old = new Set(oldresult.rows.map(x => x.code));
@@ -55,7 +55,7 @@ processor.callAsync("saveJYVehicleModels", async (ctx: ProcessorContext, args: a
     const models_to_save = models_jy.filter(x => codeset.has(x["vehicleCode"]));
     for (let i = 0, len = models_to_save.length; i < len; i ++) {
       const model = models_to_save[i];
-      values.push("($" + (i * 2 + 1) + ", 1, " + (i * 2 + 2) + ")");
+      values.push("($" + (i * 2 + 1) + ", 1, " + "$" + (i * 2 + 2) + ")");
       params.push(model["vehicleCode"]);
       params.push(model);
     }
@@ -239,8 +239,6 @@ function row2vehicle(row: QueryResult): Vehicle {
     last_insurance_company: trim(row["last_insurance_company"]),
     insurance_due_date: row["insurance_due_date"],
     accident_status: row["accident_status"],
-    issue_date: row["issue_date"],
-    driving_view: row["driving_view"],
   };
 }
 
@@ -289,8 +287,8 @@ processor.callAsync("saveZTVehicleModels", async (ctx: ProcessorContext, vehicle
       x["vehicleCode"] = code;
       return x;
     });
-    const newcodes = models_zt.map(x => x["vehicleCode"]);
-    const oldresult = await db.query("SELECT code FROM vehicle_models WHERE code in $1", [newcodes]);
+    const newcodes = models_zt.map(x => `'${x["vehicleCode"]}'`).join(",");
+    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes})`, []);
     const codeset: Set<string> = new Set<string>();
     if (oldresult.rowCount > 0) {
       const oldset = new Set(oldresult.rows.map(x => x.code));
@@ -309,7 +307,7 @@ processor.callAsync("saveZTVehicleModels", async (ctx: ProcessorContext, vehicle
     const models_to_save = models_zt.filter(x => codeset.has(x["vehicleCode"]));
     for (let i = 0, len = models_to_save.length; i < len; i ++) {
       const model = models_to_save[i];
-      values.push("($" + (i * 2 + 1) + ", 2, " + (i * 2 + 2) + ")");
+      values.push("($" + (i * 2 + 1) + ", 2, " + "$" +  (i * 2 + 2) + ")");
       params.push(model["vehicleCode"]);
       params.push(model);
     }
@@ -379,7 +377,7 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: st
 
 async function sync_vehicle(ctx: ProcessorContext, db: PGClient, cache: RedisClient, vid?: string): Promise<any> {
   try {
-    const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, v.issue_date, v.driving_view, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
+    const result = await db.query("SELECT v.id, v.license_no, v.engine_no, v.register_date, v.is_transfer, v.receipt_no, v.receipt_date, v.last_insurance_company, v.insurance_due_date, v.fuel_type, v.accident_status, v.vin, v.created_at, v.updated_at, m.source, m.code AS vehicle_code, m.data AS vmodel FROM vehicles AS v LEFT JOIN vehicle_models AS m ON v.vehicle_code = m.code WHERE v.deleted = false AND m.deleted = false" + (vid ? " AND v.id = $1" : ""), (vid ? [vid] : []));
     const multi = bluebird.promisifyAll(cache.multi()) as Multi;
     if (result.rowCount > 0) {
       for (const row of result.rows) {
