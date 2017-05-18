@@ -35,8 +35,8 @@ processor.callAsync("saveJYVehicleModels", async (ctx: ProcessorContext, args: a
   const cache: RedisClient = ctx.cache;
   try {
     const models_jy = args;
-    const newcodes = models_jy.map(x => `'${x["vehicleCode"]}'`);
-    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes})`, []);
+    const newcodes = models_jy.map(x => x["vehicleCode"]);
+    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes.map(x => `'${x}'`).join(",")})`, []);
     const codeset: Set<string> = new Set<string>();
     if (oldresult.rowCount > 0) {
       const old = new Set(oldresult.rows.map(x => x.code));
@@ -92,7 +92,7 @@ processor.callAsync("createVehicle", async (ctx: ProcessorContext, vehicle_code:
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
-        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
+        if ((vin.indexOf("*") === -1 && vin === vhc["vin"]) || (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"]))) {
           if (!vhc["register_date"]) {
             await db.query("UPDATE vehicles SET register_date = $1 WHERE id = $2", [register_date, vhc["id"]]);
             await sync_vehicle(ctx, db, cache, vhc["id"]);
@@ -124,7 +124,7 @@ processor.callAsync("createNewVehicle", async (ctx: ProcessorContext, vehicle_co
     if (l2vresult.rowCount > 0) {
       const vin2Vehicles = l2vresult.rows;
       for (const vhc of vin2Vehicles) {
-        if (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"])) {
+        if ((vin.indexOf('*') === -1 && vin === vhc["vin"]) || (cmpVin(vin, vhc["vin"]) && cmpEngineNo(engine_no, vhc["engine_no"]))) {
           return {
             code: 200,
             data: vhc["id"],
@@ -281,8 +281,8 @@ processor.callAsync("saveZTVehicleModels", async (ctx: ProcessorContext, vehicle
       x["vehicleCode"] = code;
       return x;
     });
-    const newcodes = models_zt.map(x => `'${x["vehicleCode"]}'`).join(",");
-    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes})`, []);
+    const newcodes = models_zt.map(x => x["vehicleCode"]);
+    const oldresult = await db.query(`SELECT code FROM vehicle_models WHERE code in (${newcodes.map(x => `'${x}'`).join(",")})`, []);
     const codeset: Set<string> = new Set<string>();
     if (oldresult.rowCount > 0) {
       const oldset = new Set(oldresult.rows.map(x => x.code));
@@ -346,11 +346,9 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: st
   const db: PGClient = ctx.db;
   const cache: RedisClient = ctx.cache;
   try {
-    await db.query("BEGIN");
     const is_vid_exist_result = await db.query("SELECT id FROM vehicles WHERE id = $1", [vid]);
     if (is_vid_exist_result.rowCount > 0) {
       await db.query("UPDATE vehicles SET insurance_due_date = $1, updated_at = $2 WHERE id = $3", [insurance_due_date, new Date(), vid]);
-      await db.query("COMMIT");
       await sync_vehicle(ctx, db, cache, vid);
     } else {
       log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}, msg: 车辆信息未找到`);
@@ -361,7 +359,6 @@ processor.callAsync("setInsuranceDueDate", async (ctx: ProcessorContext, vid: st
     }
     return { code: 200, data: vid };
   } catch (err) {
-    await db.query("ROLLBACK");
     ctx.report(3, err);
     log.error(`setInsuranceDueDate, sn: ${ctx.sn}, uid: ${ctx.uid}, vid: ${vid}, insurance_due_date: ${insurance_due_date}`, err);
     return { code: 500, msg: `设置保险到期时间失败(VSDP500 ${err.message})` };
