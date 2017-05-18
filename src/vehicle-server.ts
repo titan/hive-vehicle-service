@@ -66,7 +66,7 @@ server.callAsync("fetchVehicleModelsByVin", allowAll, "获取车型信息", "根
     const options: Option = {
       log: log,
       sn: ctx.sn,
-      disque: server.queue,
+      disque: server.queue_provider.instance(),
       queue: "vehicle-package",
     };
     try {
@@ -321,7 +321,7 @@ server.callAsync("getCityCode", allowAll, "获取市国标码", "通过省国标
     const options: Option = {
       log: log,
       sn: ctx.sn,
-      disque: server.queue,
+      disque: server.queue_provider.instance(),
       queue: "vehicle-package",
     };
     const ctr = await getCity(provinceCode, options);
@@ -402,7 +402,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
         const options: Option = {
           log: log,
           sn: ctx.sn,
-          disque: server.queue,
+          disque: server.queue_provider.instance(),
           queue: "vehicle-package",
         };
         const vblr = await getVehicleByLicense(license, options);
@@ -448,7 +448,7 @@ server.callAsync("fetchVehicleAndModelsByLicense", allowAll, "根据车牌号查
     const options: Option = {
       log,
       sn: ctx.sn,
-      disque: server.queue,
+      disque: server.queue_provider.instance(),
       queue: "vehicle-package",
     };
     const vblr = await getVehicleByLicense(license, options);
@@ -532,7 +532,7 @@ server.callAsync("fetchVehicleByVin", allowAll, "根据车牌号查询车信息"
   const options: Option = {
     log,
     sn: ctx.sn,
-    disque: server.queue,
+    disque: server.queue_provider.instance(),
     queue: "vehicle-package",
   };
   return await getVehicleByFrameNo(vin, options);
