@@ -10,9 +10,10 @@ import { getCity, getVehicleByLicense, getVehicleByFrameNo, getCarModel } from "
 import { Vehicle, VehicleModel } from "vehicle-library";
 import * as bluebird from "bluebird";
 
-const allowAll: Permission[] = [["mobile", true], ["admin", true]];
-const mobileOnly: Permission[] = [["mobile", true], ["admin", false]];
-const adminOnly: Permission[] = [["mobile", false], ["admin", true]];
+const allowAll: Permission[] = [["mobile", true], ["admin", true], ["agent", true]];
+const mobileOnly: Permission[] = [["mobile", true], ["admin", false], ["agent", false]];
+const adminOnly: Permission[] = [["mobile", false], ["admin", true], ["agent", false]];
+const agentOnly: Permission[] = [["mobile", false], ["admin", false], ["agent", true]];
 
 export const server = new Server();
 
